@@ -8,7 +8,7 @@ time; older releases are not patched.
 ## Reporting a vulnerability
 
 Report privately through
-[GitHub's advisory form](https://github.com/napalm255/quickts/security/advisories/new)
+[GitHub's advisory form](https://github.com/Ghost-Assembly/quickts/security/advisories/new)
 rather than opening an issue.
 
 Please include the GNOME Shell version, the QuickTS version, the Tailscale

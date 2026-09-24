@@ -5,7 +5,7 @@ Tailscale in the GNOME quick settings menu.
 Toggle the tailnet, pick an exit node, switch between profiles, copy a node's
 address and send a file over Taildrop, without leaving the panel.
 
-**[Documentation →](https://napalm255.github.io/quickts/)** — architecture,
+**[Documentation →](https://ghost-assembly.github.io/quickts/)** — architecture,
 testing, packaging and releasing.
 
 ## Requires
@@ -23,7 +23,7 @@ rather than showing a tailnet that is silently disconnected.
 ## Install
 
 ```bash
-curl -LO https://github.com/napalm255/quickts/releases/latest/download/quickts@napalm255.github.io.shell-extension.zip
+curl -LO https://github.com/Ghost-Assembly/quickts/releases/latest/download/quickts@napalm255.github.io.shell-extension.zip
 gnome-extensions install --force quickts@napalm255.github.io.shell-extension.zip
 gnome-extensions enable quickts@napalm255.github.io
 ```
@@ -50,7 +50,7 @@ just docs         # serve the documentation site
 The suite runs on plain Node. Every decision QuickTS makes lives in a pure
 module under `modules/`, and the two files that touch GNOME or libsoup are kept
 deliberately free of branching — see the
-[architecture notes](https://napalm255.github.io/quickts/#architecture).
+[architecture notes](https://ghost-assembly.github.io/quickts/#architecture).
 
 ## Releasing
 
