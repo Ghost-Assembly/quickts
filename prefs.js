@@ -269,7 +269,7 @@ export default class QuickTSPreferences extends ExtensionPreferences {
             ),
         });
 
-        // One token for the lifetime of the window; cancelling it aborts any
+        // One token for the lifetime of the window; canceling it aborts any
         // request still in flight when it closes.
         const token = new CancelToken();
         const io = createIo({ token });

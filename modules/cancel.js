@@ -4,51 +4,51 @@
 // AbortSignal — checked against the running interpreter, not assumed — so
 // there is nothing on the platform to use here and the type is ours to define.
 //
-// The whole point of it is the pairing in `onCancel`. Cancelling must both
+// The whole point of it is the pairing in `onCancel`. Canceling must both
 // release the resource *and* settle whatever was waiting on it. The extension
 // QuickTS replaces does only the first: disable() removes the GLib timeout that
 // its reconnect loop is awaiting, the timeout's callback therefore never runs,
 // the promise never settles, and the loop, its async generator, its input
 // stream and its Soup session all stay alive until the Shell restarts.
 
-/** Thrown by anything that was waiting when the token was cancelled. */
-export class CancelledError extends Error {
+/** Thrown by anything that was waiting when the token was canceled. */
+export class CanceledError extends Error {
     /**
      * @param {string} [message] Description.
      */
-    constructor(message = 'cancelled') {
+    constructor(message = 'canceled') {
         super(message);
 
         // Set explicitly rather than left to the constructor name, so that
-        // isCancelled() still recognises it after a minifier or a second realm.
-        this.name = 'CancelledError';
+        // isCanceled() still recognizes it after a minifier or a second realm.
+        this.name = 'CanceledError';
     }
 }
 
 /**
- * Whether an error means "we cancelled this", rather than "this failed".
+ * Whether an error means "we canceled this", rather than "this failed".
  *
  * Gio reports its own cancellation as a GError in the Gio.IOErrorEnum domain.
- * Translating that into a CancelledError is modules/io.js's job, at the
+ * Translating that into a CanceledError is modules/io.js's job, at the
  * boundary where Gio is actually in scope — this file must stay importless. A
  * Gio error that escapes untranslated is still handled safely, because every
- * caller checks `token.cancelled` before it consults this.
+ * caller checks `token.canceled` before it consults this.
  *
  * @param {unknown} error Caught value.
- * @returns {boolean} True if the operation was cancelled rather than failed.
+ * @returns {boolean} True if the operation was canceled rather than failed.
  */
-export function isCancelled(error) {
-    return error instanceof CancelledError || error?.name === 'CancelledError';
+export function isCanceled(error) {
+    return error instanceof CanceledError || error?.name === 'CanceledError';
 }
 
 /** A one-way flag that fires callbacks when it is set. */
 export class CancelToken {
-    #cancelled = false;
+    #canceled = false;
     #callbacks = new Set();
 
     /** @returns {boolean} Whether cancel() has been called. */
-    get cancelled() {
-        return this.#cancelled;
+    get canceled() {
+        return this.#canceled;
     }
 
     /**
@@ -62,8 +62,8 @@ export class CancelToken {
      * one moment where a single failure would leak everything else.
      */
     cancel() {
-        if (this.#cancelled) return;
-        this.#cancelled = true;
+        if (this.#canceled) return;
+        this.#canceled = true;
 
         const callbacks = [...this.#callbacks];
         this.#callbacks.clear();
@@ -84,11 +84,11 @@ export class CancelToken {
      * that races disable() still cleans up rather than waiting for a signal
      * that has already been sent.
      *
-     * @param {() => void} callback Runs once, when the token is cancelled.
+     * @param {() => void} callback Runs once, when the token is canceled.
      * @returns {() => void} Unregisters the callback. Safe to call more than once.
      */
     onCancel(callback) {
-        if (this.#cancelled) {
+        if (this.#canceled) {
             callback();
             return () => {};
         }
@@ -97,9 +97,9 @@ export class CancelToken {
         return () => this.#callbacks.delete(callback);
     }
 
-    /** @throws {CancelledError} If the token has been cancelled. */
-    throwIfCancelled() {
-        if (this.#cancelled) throw new CancelledError();
+    /** @throws {CanceledError} If the token has been canceled. */
+    throwIfCanceled() {
+        if (this.#canceled) throw new CanceledError();
     }
 
     /** @returns {number} Registered callbacks. Lets a test assert nothing leaked. */

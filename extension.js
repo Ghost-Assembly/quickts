@@ -21,7 +21,7 @@ import { Panel } from './modules/panel.js';
 
 export default class QuickTSExtension extends Extension {
     enable() {
-        // One token for this enable. Cancelling it aborts every request in
+        // One token for this enable. Canceling it aborts every request in
         // flight, settles every pending wait and drops every GLib source —
         // see modules/io.js for why the last two have to happen together.
         this._token = new CancelToken();
@@ -53,7 +53,7 @@ export default class QuickTSExtension extends Extension {
     }
 
     disable() {
-        // Ordered. Cancelling first means nothing in flight can touch anything
+        // Ordered. Canceling first means nothing in flight can touch anything
         // that the three teardowns below are about to take apart.
         this._token?.cancel();
         this._model?.destroy();

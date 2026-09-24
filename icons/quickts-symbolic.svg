@@ -11,8 +11,8 @@
         renders as no icon at all, with nothing in the log to say why.
 
         fill="#222222" on a group is Adwaita's own convention; gnome-shell
-        recolours a *-symbolic.svg from the theme, so nothing here may depend
-        on the colour actually being this one.
+        recolors a *-symbolic.svg from the theme, so nothing here may depend
+        on the color actually being this one.
     -->
     <g fill="#222222">
         <g opacity="0.35">

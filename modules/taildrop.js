@@ -8,7 +8,7 @@
 // only the second gives one that offers sends the daemon will refuse.
 //
 // So the menu is built from the intersection: eligible nodes are actionable,
-// and the rest are shown greyed out with the daemon's own reason.
+// and the rest are shown grayed out with the daemon's own reason.
 //
 // This file imports nothing.
 
@@ -70,7 +70,7 @@ export function reasonFor(status) {
 /**
  * Whether a node can receive a file.
  *
- * @param {object} node A normalised node.
+ * @param {object} node A normalized node.
  * @returns {boolean} True if the daemon would accept a send.
  */
 export function canReceive(node) {
@@ -88,7 +88,7 @@ export function canReceive(node) {
  * Eligible nodes come first, then the rest by name, so the useful half of the
  * list is not buried under a tailnet's worth of sleeping laptops.
  *
- * @param {object[]} nodes Normalised nodes.
+ * @param {object[]} nodes Normalized nodes.
  * @param {object[]} fileTargets The /file-targets response.
  * @returns {Array<{node: object, eligible: boolean, reason: string}>} Rows to show.
  */
@@ -126,7 +126,7 @@ export function sendTargets(nodes, fileTargets) {
  * file-targets has no more specific explanation to offer than that it cannot
  * be reached right now.
  *
- * @param {object} node A normalised node.
+ * @param {object} node A normalized node.
  * @returns {number} A TaildropTargetStatus.
  */
 function unlistedReason(node) {

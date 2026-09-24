@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CancelToken, CancelledError, isCancelled } from '../modules/cancel.js';
+import { CancelToken, CanceledError, isCanceled } from '../modules/cancel.js';
 
 describe('CancelToken', () => {
-    it('starts uncancelled', () => {
-        expect(new CancelToken().cancelled).toBe(false);
+    it('starts uncanceled', () => {
+        expect(new CancelToken().canceled).toBe(false);
     });
 
     it('reports cancellation', () => {
         const token = new CancelToken();
         token.cancel();
 
-        expect(token.cancelled).toBe(true);
+        expect(token.canceled).toBe(true);
     });
 
     it('runs callbacks on cancel', () => {
@@ -25,7 +25,7 @@ describe('CancelToken', () => {
         expect(seen).toEqual(['a', 'b']);
     });
 
-    // disable() may run after something has already given up and cancelled.
+    // disable() may run after something has already given up and canceled.
     it('runs each callback only once, however often cancel is called', () => {
         const token = new CancelToken();
         const callback = vi.fn();
@@ -39,7 +39,7 @@ describe('CancelToken', () => {
     });
 
     // The race this exists for: a request registers its cleanup a tick after
-    // disable() already cancelled. Waiting for a signal that has been and gone
+    // disable() already canceled. Waiting for a signal that has been and gone
     // would leak the very thing the callback was going to release.
     it('runs a callback registered after cancellation immediately', () => {
         const token = new CancelToken();
@@ -104,7 +104,7 @@ describe('CancelToken', () => {
         expect(late).toHaveBeenCalledTimes(1);
     });
 
-    it('holds no callbacks after cancelling', () => {
+    it('holds no callbacks after canceling', () => {
         const token = new CancelToken();
         token.onCancel(() => {});
         token.onCancel(() => {});
@@ -114,33 +114,33 @@ describe('CancelToken', () => {
         expect(token.callbackCount).toBe(0);
     });
 
-    it('throws only once cancelled', () => {
+    it('throws only once canceled', () => {
         const token = new CancelToken();
 
-        expect(() => token.throwIfCancelled()).not.toThrow();
+        expect(() => token.throwIfCanceled()).not.toThrow();
 
         token.cancel();
 
-        expect(() => token.throwIfCancelled()).toThrow(CancelledError);
+        expect(() => token.throwIfCanceled()).toThrow(CanceledError);
     });
 });
 
-describe('isCancelled', () => {
-    it('recognises a CancelledError', () => {
-        expect(isCancelled(new CancelledError())).toBe(true);
+describe('isCanceled', () => {
+    it('recognizes a CanceledError', () => {
+        expect(isCanceled(new CanceledError())).toBe(true);
     });
 
     // Survives a second realm, where instanceof does not.
-    it('recognises anything carrying the name', () => {
-        expect(isCancelled({ name: 'CancelledError' })).toBe(true);
+    it('recognizes anything carrying the name', () => {
+        expect(isCanceled({ name: 'CanceledError' })).toBe(true);
     });
 
     it.each([
         ['a plain error', new Error('connection refused')],
         ['null', null],
         ['undefined', undefined],
-        ['a string', 'cancelled'],
+        ['a string', 'canceled'],
     ])('does not mistake %s for cancellation', (_reason, value) => {
-        expect(isCancelled(value)).toBe(false);
+        expect(isCanceled(value)).toBe(false);
     });
 });

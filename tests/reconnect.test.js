@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CancelToken, CancelledError } from '../modules/cancel.js';
+import { CancelToken, CanceledError } from '../modules/cancel.js';
 import { runWithReconnect } from '../modules/reconnect.js';
 
 /**
@@ -41,7 +41,7 @@ function harness({ streams, stopAfter = Infinity }) {
                     delays.push(ms);
                     if (delays.length >= stopAfter) {
                         token.cancel();
-                        return Promise.reject(new CancelledError());
+                        return Promise.reject(new CanceledError());
                     }
                     return Promise.resolve();
                 },
@@ -144,14 +144,14 @@ describe('runWithReconnect', () => {
                 onError: () => {},
                 delay: () => {
                     token.cancel();
-                    return Promise.reject(new CancelledError());
+                    return Promise.reject(new CanceledError());
                 },
                 backoff: () => 1000,
             }),
         ).resolves.toBeUndefined();
     });
 
-    it('stops without connecting when the token is already cancelled', async () => {
+    it('stops without connecting when the token is already canceled', async () => {
         const h = harness({ streams: [yields('never')] });
         h.token.cancel();
         await h.run();
@@ -160,7 +160,7 @@ describe('runWithReconnect', () => {
         expect(h.events).toEqual([]);
     });
 
-    it('stops mid-stream once cancelled', async () => {
+    it('stops mid-stream once canceled', async () => {
         const token = new CancelToken();
         const events = [];
 
@@ -189,7 +189,7 @@ describe('runWithReconnect', () => {
             token,
             connect: async function* () {
                 token.cancel();
-                throw new CancelledError();
+                throw new CanceledError();
                 // eslint-disable-next-line no-unreachable
                 yield '';
             },

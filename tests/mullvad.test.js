@@ -179,7 +179,7 @@ describe('groupByCountry', () => {
         expect(groups.at(-1).country).toEqual(UNKNOWN_COUNTRY);
     });
 
-    // The whole point of degrading rather than guessing: an unrecognised node
+    // The whole point of degrading rather than guessing: an unrecognized node
     // is still reachable from the menu.
     it('loses no node, whatever its shape', () => {
         const nodes = [

@@ -43,7 +43,7 @@ export class TransportError extends Error {
         // are flattened into the message and gone.
         super(message, { cause });
 
-        // Set explicitly so it survives a realm boundary, as CancelledError does.
+        // Set explicitly so it survives a realm boundary, as CanceledError does.
         this.name = 'TransportError';
         this.reason = reason;
         this.status = status;

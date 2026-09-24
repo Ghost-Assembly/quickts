@@ -47,7 +47,7 @@ describe('menuMaxHeight', () => {
         );
     });
 
-    it('honours a user-set ceiling', () => {
+    it('honors a user-set ceiling', () => {
         expect(menuMaxHeight(screen({ capPx: 400 }))).toBe(400);
     });
 

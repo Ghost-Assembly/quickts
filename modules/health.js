@@ -18,7 +18,7 @@
 import { REASON, commandFor, isActionable, messageFor } from './errors.js';
 import { BACKEND } from './state.js';
 
-/** How many health warnings to show before summarising the rest. */
+/** How many health warnings to show before summarizing the rest. */
 export const MAX_HEALTH_LINES = 3;
 
 /** What the subtitle is about. modules/panel.js maps these to wording. */

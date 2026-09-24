@@ -41,7 +41,7 @@ describe('isUp', () => {
 });
 
 describe('needsLogin', () => {
-    it('recognises the state that has no other way out', () => {
+    it('recognizes the state that has no other way out', () => {
         expect(needsLogin(up({ backendState: BACKEND.NEEDS_LOGIN }))).toBe(true);
     });
 

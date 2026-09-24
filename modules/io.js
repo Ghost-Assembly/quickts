@@ -15,7 +15,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
-import { CancelledError } from './cancel.js';
+import { CanceledError } from './cancel.js';
 import { REASON, TransportError } from './errors.js';
 import { uniqueName } from './inbox.js';
 import { HOST, SOCKET_PATHS, pickSocket } from './localapi.js';
@@ -49,19 +49,19 @@ const REQUEST = 'org.freedesktop.portal.Request';
  * Translate a caught value into the vocabulary the rest of QuickTS reasons in.
  *
  * Gio reports cancellation as a GError rather than by any other means, so this
- * is also where a cancelled operation stops looking like a failure. Getting
+ * is also where a canceled operation stops looking like a failure. Getting
  * that wrong would make every disable() log an error.
  *
  * @param {unknown} error Caught value.
- * @returns {Error} A CancelledError or a TransportError.
+ * @returns {Error} A CanceledError or a TransportError.
  */
 function translate(error) {
-    if (error?.name === 'CancelledError' || error?.name === 'TransportError')
+    if (error?.name === 'CanceledError' || error?.name === 'TransportError')
         return error;
 
     if (error instanceof Gio.IOErrorEnum || typeof error?.matches === 'function') {
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-            return new CancelledError();
+            return new CanceledError();
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
             return transportError(REASON.SOCKET_MISSING, error);
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_REFUSED))
@@ -95,7 +95,7 @@ function transportError(reason, error) {
  * String() on a plain object gives "[object Object]", which is the least
  * useful thing that could reach the journal at the moment something has gone
  * wrong. A GError and an Error both carry a message; a string is already one;
- * anything else is serialised so at least its fields survive.
+ * anything else is serialized so at least its fields survive.
  *
  * @param {unknown} error Caught value.
  * @returns {string} Something worth logging.
@@ -190,7 +190,7 @@ function closeRequest(bus, handle) {
 /**
  * Build the transport for one enable/disable lifetime.
  *
- * Everything it returns is bound to `token`. Cancelling the token aborts every
+ * Everything it returns is bound to `token`. Canceling the token aborts every
  * request in flight, settles every pending wait, and drops every GLib source —
  * see the note on delay() for why the last two must happen together.
  *
@@ -231,7 +231,7 @@ export function createIo({ token }) {
                 REASON.SOCKET_MISSING,
                 `no tailscaled socket at ${SOCKET_PATHS.join(' or ')}`,
             );
-        token.throwIfCancelled();
+        token.throwIfCanceled();
     };
 
     const build = ({ method, path, body }) => {
@@ -335,7 +335,7 @@ export function createIo({ token }) {
                 } finally {
                     // Deliberately null, not `cancellable`. By the time this
                     // runs during a disable the cancellable is already
-                    // cancelled, and g_input_stream_close on a cancelled
+                    // canceled, and g_input_stream_close on a canceled
                     // cancellable fails immediately — throwing out of a finally
                     // block, which would replace the real error with a bogus
                     // one and skip the rest of teardown.
@@ -409,12 +409,12 @@ export function createIo({ token }) {
          * @param {object} [options] Options.
          * @param {string} [options.title] Dialog title.
          * @param {boolean} [options.multiple] Allow more than one file.
-         * @returns {Promise<string[]>} Chosen file:// URIs; empty if cancelled.
+         * @returns {Promise<string[]>} Chosen file:// URIs; empty if canceled.
          */
         chooseFiles({ title = 'Select files', multiple = true } = {}) {
             return new Promise((resolve, reject) => {
-                if (token.cancelled) {
-                    reject(new CancelledError());
+                if (token.canceled) {
+                    reject(new CanceledError());
                     return;
                 }
 
@@ -551,9 +551,9 @@ export function createIo({ token }) {
 
         scheduler: {
             /**
-             * Wait, unless the token is cancelled first.
+             * Wait, unless the token is canceled first.
              *
-             * Cancelling removes the source *and* rejects the promise, in one
+             * Canceling removes the source *and* rejects the promise, in one
              * callback. That pairing is the entire point. The extension QuickTS
              * replaces removes the source from somewhere else entirely, so the
              * timeout callback never runs, the promise never settles, and the
@@ -564,8 +564,8 @@ export function createIo({ token }) {
              */
             delay(ms) {
                 return new Promise((resolve, reject) => {
-                    if (token.cancelled) {
-                        reject(new CancelledError());
+                    if (token.canceled) {
+                        reject(new CanceledError());
                         return;
                     }
 
@@ -580,7 +580,7 @@ export function createIo({ token }) {
 
                     off = token.onCancel(() => {
                         if (sources.delete(id)) GLib.Source.remove(id);
-                        reject(new CancelledError());
+                        reject(new CanceledError());
                     });
                 });
             },
@@ -589,7 +589,7 @@ export function createIo({ token }) {
         /**
          * Release everything.
          *
-         * The token is expected to have been cancelled already, which is what
+         * The token is expected to have been canceled already, which is what
          * drains `sources`; the check below is a self-audit, and it is exactly
          * the assertion the replaced extension would fail.
          */

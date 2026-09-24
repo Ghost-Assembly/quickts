@@ -112,17 +112,17 @@ describe('QuickTSExtension', () => {
         extension.disable();
     });
 
-    // Every piece must share one token, or cancelling would only reach some of
+    // Every piece must share one token, or canceling would only reach some of
     // them and the rest would keep running against a torn-down transport.
     it('gives the transport the same token it cancels', async () => {
         const { extension } = await load();
 
         extension.enable();
-        expect(ioToken.cancelled).toBe(false);
+        expect(ioToken.canceled).toBe(false);
 
         extension.disable();
 
-        expect(ioToken.cancelled).toBe(true);
+        expect(ioToken.canceled).toBe(true);
     });
 
     it('disposes the transport', async () => {

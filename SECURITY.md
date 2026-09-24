@@ -12,7 +12,7 @@ Report privately through
 rather than opening an issue.
 
 Please include the GNOME Shell version, the QuickTS version, the Tailscale
-version, and the steps to reproduce. You can expect an acknowledgement within a
+version, and the steps to reproduce. You can expect an acknowledgment within a
 week.
 
 ## Scope
@@ -22,7 +22,7 @@ QuickTS talks to the Tailscale daemon over its local Unix socket at
 uses. Anything you can do through the menu, you can already do from a terminal
 as the tailscale operator; the extension grants no privilege you did not have.
 
-The parts worth scrutinising:
+The parts worth scrutinizing:
 
 - **The LocalAPI client** (`modules/io.js`, `modules/localapi.js`). Every request
   path is built in `localapi.js`, where node identifiers and Taildrop filenames

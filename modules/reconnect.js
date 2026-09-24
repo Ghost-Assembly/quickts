@@ -1,13 +1,13 @@
 // Keep a stream open for as long as the token is live.
 //
 // This file imports nothing but modules/cancel.js, and takes the connection,
-// the clock and the schedule as arguments — so the entire retry behaviour is
+// the clock and the schedule as arguments — so the entire retry behavior is
 // exercised in Vitest on plain Node, with no timers and no sockets.
 
-import { isCancelled } from './cancel.js';
+import { isCanceled } from './cancel.js';
 
 /**
- * Consume a stream, reconnecting until cancelled.
+ * Consume a stream, reconnecting until canceled.
  *
  * Three things here that the extension QuickTS replaces gets wrong.
  *
@@ -38,7 +38,7 @@ import { isCancelled } from './cancel.js';
  * @param {(error: unknown) => void} options.onError Receives each failure.
  * @param {(ms: number) => Promise<void>} options.delay Waits, rejecting on cancel.
  * @param {(attempt: number) => number} options.backoff How long to wait before retry n.
- * @returns {Promise<void>} Resolves once the token is cancelled.
+ * @returns {Promise<void>} Resolves once the token is canceled.
  */
 export async function runWithReconnect({
     token,
@@ -50,10 +50,10 @@ export async function runWithReconnect({
 }) {
     let attempt = 0;
 
-    while (!token.cancelled) {
+    while (!token.canceled) {
         const outcome = await consumeStream({ token, connect, onEvent, onError });
 
-        if (outcome === STREAM.CANCELLED || token.cancelled) return;
+        if (outcome === STREAM.CANCELED || token.canceled) return;
         if (outcome === STREAM.PRODUCTIVE) attempt = 0;
 
         try {
@@ -73,8 +73,8 @@ const STREAM = Object.freeze({
     PRODUCTIVE: 'productive',
     /** It connected and delivered nothing, or failed. */
     BARREN: 'barren',
-    /** The token was cancelled; the loop should stop. */
-    CANCELLED: 'cancelled',
+    /** The token was canceled; the loop should stop. */
+    CANCELED: 'canceled',
 });
 
 /**
@@ -100,15 +100,15 @@ async function consumeStream({ token, connect, onEvent, onError }) {
         // throwing through it, calls the generator's return(), which runs the
         // finally that closes the stream.
         for await (const event of connect()) {
-            if (token.cancelled) return STREAM.CANCELLED;
+            if (token.canceled) return STREAM.CANCELED;
 
             productive = true;
             onEvent(event);
         }
     } catch (error) {
-        // Checked before isCancelled, so a Gio cancellation that escaped
+        // Checked before isCanceled, so a Gio cancellation that escaped
         // untranslated still ends the loop rather than being retried.
-        if (token.cancelled || isCancelled(error)) return STREAM.CANCELLED;
+        if (token.canceled || isCanceled(error)) return STREAM.CANCELED;
 
         onError(error);
     }

@@ -58,6 +58,6 @@ Set the version in `metadata.json` (`version-name`) and `package.json`, commit,
 then tag and push. The release workflow refuses a tag that disagrees with
 either file.
 
-## Licence
+## License
 
 GPL-3.0-or-later.

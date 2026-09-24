@@ -57,7 +57,7 @@ export function flagFor(code) {
 /**
  * Where a Mullvad node is, as best as can be determined.
  *
- * @param {object} node A normalised node.
+ * @param {object} node A normalized node.
  * @returns {{code: string, name: string, flag: string}} The country.
  */
 export function countryOf(node) {
@@ -89,7 +89,7 @@ export function countryOf(node) {
  * The country is already the group heading, so repeating it in every row
  * wastes the width the city needs.
  *
- * @param {object} node A normalised node.
+ * @param {object} node A normalized node.
  * @returns {string} A label.
  */
 export function cityOf(node) {
@@ -99,7 +99,7 @@ export function cityOf(node) {
 /**
  * Split the ordinary nodes from Mullvad's.
  *
- * @param {object[]} nodes Normalised nodes.
+ * @param {object[]} nodes Normalized nodes.
  * @returns {{regular: object[], mullvad: object[]}} The two lists, order preserved.
  */
 export function partitionMullvad(nodes) {

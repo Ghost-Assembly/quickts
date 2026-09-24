@@ -7,7 +7,7 @@
  * diagram is styled markup rather than a script, and the navigation is plain
  * anchors.
  *
- * Every colour pair carries its measured contrast ratio. They are not
+ * Every color pair carries its measured contrast ratio. They are not
  * decoration: WCAG 2.2 AA wants 4.5:1 for body text, and the accent sits at
  * 4.84:1 on the tinted hero — close enough that deepening that tint without
  * also darkening the accent would take it below the line.
@@ -275,7 +275,7 @@ a:hover {
     text-decoration-thickness: 2px;
 }
 
-/* Never rely on colour alone: focus gets a real outline. */
+/* Never rely on color alone: focus gets a real outline. */
 a:focus-visible,
 .skip:focus-visible {
     outline: 2px solid var(--accent);
@@ -471,7 +471,7 @@ kbd {
     font-weight: 600;
 }
 
-/* The annotation is real text, never a colour or an icon on its own — the
+/* The annotation is real text, never a color or an icon on its own — the
  * whole diagram has to survive being read aloud. */
 .menu-when {
     color: var(--ink-soft);

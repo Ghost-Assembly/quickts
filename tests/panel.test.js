@@ -198,7 +198,7 @@ describe('problems and warnings', () => {
 
     // Long messages are whole sentences in a menu barely wider than one line
     // of them, so an ellipsis shows the reader the least useful half.
-    it('wraps a warning instead of ellipsising it', async () => {
+    it('wraps a warning instead of ellipsizing it', async () => {
         const { panel, model, daemon } = setup();
         daemon.responses.status.Health = [
             'SELinux is enabled; Tailscale SSH may not work. See https://tailscale.com/s/ssh-selinux',
@@ -253,7 +253,7 @@ describe('problems and warnings', () => {
         expect(launchedUris).toEqual([]);
     });
 
-    it('pluralises the count', async () => {
+    it('pluralizes the count', async () => {
         const { panel, model, daemon } = setup();
         daemon.responses.status.Health = ['one', 'two'];
         panel.enable();
@@ -919,7 +919,7 @@ describe('the settings switches', () => {
     });
 
     // Built once rather than rebuilt, so toggling one does not destroy the
-    // actor the click is still travelling through.
+    // actor the click is still traveling through.
     it('survive being toggled and re-synced', async () => {
         const { panel, model } = setup();
         panel.enable();
@@ -1225,7 +1225,7 @@ describe('menu height', () => {
         );
     });
 
-    it('honours the configured ceiling', async () => {
+    it('honors the configured ceiling', async () => {
         const settings = createSettings({ [KEYS.MAX_MENU_HEIGHT]: 300 });
         const { panel, model } = setup({ settings });
         panel.enable();
@@ -1885,7 +1885,7 @@ describe('taildrop', () => {
         expect(toggleOf()._taildrop.menu.items.at(0).text).toBe('laptop');
     });
 
-    // Greyed out with the daemon's own reason, rather than silently dropped —
+    // Grayed out with the daemon's own reason, rather than silently dropped —
     // which is what makes the difference between "that machine is asleep" and
     // "this extension is broken".
     it('shows an ineligible node with its reason', async () => {
