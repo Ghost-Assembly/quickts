@@ -82,7 +82,7 @@ export function initialState() {
  */
 function derive(state) {
     // isExitNode follows exitNodeId, so a preferences change re-marks the
-    // nodes that were normalised against the previous one.
+    // nodes that were normalized against the previous one.
     const marked = state.nodes.map(node =>
         node.isExitNode === (node.id !== '' && node.id === state.exitNodeId)
             ? node

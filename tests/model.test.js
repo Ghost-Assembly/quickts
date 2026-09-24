@@ -606,7 +606,7 @@ describe('races against a disable', () => {
         expect(result.sent).toBe(1);
     });
 
-    it('reports a cancelled ping as no reply rather than a failure', async () => {
+    it('reports a canceled ping as no reply rather than a failure', async () => {
         const { model, daemon } = setup();
         await model.start();
         daemon.failures.set('/localapi/v0/ping', new CancelledError());
@@ -617,7 +617,7 @@ describe('races against a disable', () => {
         expect(model.state.reachable).toBe(true);
     });
 
-    it('reports a cancelled save as neither saved nor failed', async () => {
+    it('reports a canceled save as neither saved nor failed', async () => {
         const { model, daemon } = setup();
         await model.start();
         daemon.failures.set('/localapi/v0/files/a.txt', new CancelledError());
@@ -733,7 +733,7 @@ describe('advertised routes', () => {
 });
 
 describe('sending files', () => {
-    it('stops sending once cancelled rather than failing every file', async () => {
+    it('stops sending once canceled rather than failing every file', async () => {
         const { model, daemon } = setup();
         await model.start();
         daemon.client.putFile = vi
@@ -747,7 +747,7 @@ describe('sending files', () => {
             'file:///c.txt',
         ]);
 
-        // The third is never attempted, and the cancelled one is not counted
+        // The third is never attempted, and the canceled one is not counted
         // as a failure — teardown is not a delivery problem.
         expect(result).toEqual({ sent: 1, failed: [] });
         expect(daemon.client.putFile).toHaveBeenCalledTimes(2);

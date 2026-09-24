@@ -283,7 +283,7 @@ export function pingRequest(ip, type) {
 /**
  * The change stream.
  *
- * Newline-delimited JSON, one notification per line, open until cancelled.
+ * Newline-delimited JSON, one notification per line, open until canceled.
  * QuickTS reads it only to learn *that* something changed; see modules/bus.js.
  *
  * @param {number} [mask] Subscription bits; see {@link WATCH_MASK}.

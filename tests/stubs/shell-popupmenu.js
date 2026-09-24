@@ -103,7 +103,7 @@ class PopupSwitchMenuItem extends PopupBaseMenuItem {
 
 class PopupSeparatorMenuItem extends PopupBaseMenuItem {}
 
-/** The shared behaviour of anything that holds menu items. */
+/** The shared behavior of anything that holds menu items. */
 class MenuBase extends FakeActor {
     _init(props = {}) {
         super._init(props);
@@ -120,7 +120,7 @@ class MenuBase extends FakeActor {
         // The real PopupMenuBase connects to 'activate' with
         // ConnectFlags.AFTER and calls itemActivated(), which closes the top
         // menu. Every activation closes the whole menu unless the item
-        // overrides activate() and declines to chain up. Modelling it here is
+        // overrides activate() and declines to chain up. Modeling it here is
         // what lets a test notice a row that should have stayed open.
         item.connect('activate', () => this._getTopMenu().close());
     }

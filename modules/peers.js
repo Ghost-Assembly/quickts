@@ -72,7 +72,7 @@ export function isMullvad(peer) {
  * Offline wins over everything else: a phone that cannot be reached is more
  * usefully drawn as unreachable than as a phone.
  *
- * @param {object} node A normalised node.
+ * @param {object} node A normalized node.
  * @returns {string} A symbolic icon name present in Adwaita.
  */
 export function iconNameFor(node) {
@@ -95,7 +95,7 @@ export function iconNameFor(node) {
  * @param {object} [context] Context.
  * @param {string} [context.exitNodeId] ExitNodeID from /prefs.
  * @param {string} [context.magicDNSSuffix] The tailnet's DNS suffix.
- * @returns {object} A normalised node.
+ * @returns {object} A normalized node.
  */
 export function normalisePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {}) {
     const id = peer?.ID ?? '';
@@ -134,14 +134,14 @@ export function normalisePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
 }
 
 /**
- * Normalise every peer in a /status response.
+ * Normalize every peer in a /status response.
  *
  * The Peer field is an object keyed by public key, and it is null rather than
  * empty on a single-node tailnet and whenever ?peers=false was used.
  *
  * @param {object|null} rawPeers The Peer field from /status.
  * @param {object} [context] Passed through to {@link normalisePeer}.
- * @returns {object[]} Normalised nodes, sorted.
+ * @returns {object[]} Normalized nodes, sorted.
  */
 export function normalisePeers(rawPeers, context = {}) {
     const peers =
@@ -160,7 +160,7 @@ export function normalisePeers(rawPeers, context = {}) {
  * A collator rather than < so that accented names sort where a reader expects
  * rather than after z.
  *
- * @param {object[]} nodes Normalised nodes.
+ * @param {object[]} nodes Normalized nodes.
  * @returns {object[]} A new, sorted array.
  */
 export function sortNodes(nodes) {
@@ -175,7 +175,7 @@ export function sortNodes(nodes) {
 /**
  * The node currently serving as exit node, if any.
  *
- * @param {object[]} nodes Normalised nodes.
+ * @param {object[]} nodes Normalized nodes.
  * @returns {object|null} The exit node, or null.
  */
 export function exitNodeOf(nodes) {

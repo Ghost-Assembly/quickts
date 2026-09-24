@@ -90,7 +90,7 @@ const ActionMenuItem = GObject.registerClass(
  * Turning on accept-routes and then accept-DNS should not mean two trips
  * through the panel. gnome-shell already allows this from the keyboard —
  * PopupSwitchMenuItem returns early for the space key — and this extends the
- * same behaviour to the pointer.
+ * same behavior to the pointer.
  */
 const StayOpenSwitchMenuItem = GObject.registerClass(
     class QuickTSSwitchMenuItem extends PopupMenu.PopupSwitchMenuItem {
@@ -118,7 +118,7 @@ const StayOpenSwitchMenuItem = GObject.registerClass(
 class NavigableSection {
     /**
      * @param {object} item The PopupSubMenuMenuItem to drive.
-     * @param {object} options Behaviour.
+     * @param {object} options Behavior.
      * @param {() => string} options.title Label while showing the list.
      * @param {string} options.back Label of the row that returns to the list.
      * @param {(view: string, state: object) => object|null} options.resolve
@@ -343,7 +343,7 @@ const QuickTSToggle = GObject.registerClass(
          * The preference switches.
          *
          * Built once rather than rebuilt, so that toggling one does not
-         * destroy the actor the click is still travelling through.
+         * destroy the actor the click is still traveling through.
          */
         _buildOptions() {
             this._switches = [
@@ -593,7 +593,7 @@ const QuickTSToggle = GObject.registerClass(
          * The exit node list, split into the tailnet's own candidates and
          * Mullvad's grouped by country.
          *
-         * Memoised on the snapshot itself. A snapshot is frozen and replaced
+         * Memoized on the snapshot itself. A snapshot is frozen and replaced
          * wholesale on every change, so identity is a sound cache key — and
          * one render asks for this up to three times (the list, the country
          * rows, and `resolve` when a country is drilled into). On a tailnet
@@ -640,7 +640,7 @@ const QuickTSToggle = GObject.registerClass(
         }
 
         /**
-         * @param {object} node A normalised node.
+         * @param {object} node A normalized node.
          * @param {string} label What to call it.
          * @returns {object} A menu item.
          */
@@ -704,7 +704,7 @@ const QuickTSToggle = GObject.registerClass(
          * What can be done to one device.
          *
          * @param {object} menu The submenu to fill.
-         * @param {object} node A normalised node.
+         * @param {object} node A normalized node.
          * @param {object} state A snapshot.
          */
         _renderDeviceActions(menu, node, state) {
@@ -756,7 +756,7 @@ const QuickTSToggle = GObject.registerClass(
          * A latency is a thing to compare and re-read, and an OSD is gone in a
          * second and takes the menu's focus with it.
          *
-         * @param {object} node A normalised node.
+         * @param {object} node A normalized node.
          * @param {object} row The menu item that was activated.
          * @returns {Promise<void>} Done.
          */
@@ -1285,7 +1285,7 @@ function showOsd(gicon, message) {
 /**
  * One health warning.
  *
- * The text wraps rather than ellipsising. These messages are whole sentences
+ * The text wraps rather than ellipsizing. These messages are whole sentences
  * and the menu is barely wider than one line of them, so a single line with a
  * trailing ellipsis shows the reader the least useful half of the warning.
  *

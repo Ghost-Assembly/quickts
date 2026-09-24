@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CancelToken, CancelledError, isCancelled } from '../modules/cancel.js';
 
 describe('CancelToken', () => {
-    it('starts uncancelled', () => {
+    it('starts uncanceled', () => {
         expect(new CancelToken().cancelled).toBe(false);
     });
 
@@ -25,7 +25,7 @@ describe('CancelToken', () => {
         expect(seen).toEqual(['a', 'b']);
     });
 
-    // disable() may run after something has already given up and cancelled.
+    // disable() may run after something has already given up and canceled.
     it('runs each callback only once, however often cancel is called', () => {
         const token = new CancelToken();
         const callback = vi.fn();
@@ -39,7 +39,7 @@ describe('CancelToken', () => {
     });
 
     // The race this exists for: a request registers its cleanup a tick after
-    // disable() already cancelled. Waiting for a signal that has been and gone
+    // disable() already canceled. Waiting for a signal that has been and gone
     // would leak the very thing the callback was going to release.
     it('runs a callback registered after cancellation immediately', () => {
         const token = new CancelToken();
@@ -104,7 +104,7 @@ describe('CancelToken', () => {
         expect(late).toHaveBeenCalledTimes(1);
     });
 
-    it('holds no callbacks after cancelling', () => {
+    it('holds no callbacks after canceling', () => {
         const token = new CancelToken();
         token.onCancel(() => {});
         token.onCancel(() => {});
@@ -114,7 +114,7 @@ describe('CancelToken', () => {
         expect(token.callbackCount).toBe(0);
     });
 
-    it('throws only once cancelled', () => {
+    it('throws only once canceled', () => {
         const token = new CancelToken();
 
         expect(() => token.throwIfCancelled()).not.toThrow();
@@ -126,12 +126,12 @@ describe('CancelToken', () => {
 });
 
 describe('isCancelled', () => {
-    it('recognises a CancelledError', () => {
+    it('recognizes a CancelledError', () => {
         expect(isCancelled(new CancelledError())).toBe(true);
     });
 
     // Survives a second realm, where instanceof does not.
-    it('recognises anything carrying the name', () => {
+    it('recognizes anything carrying the name', () => {
         expect(isCancelled({ name: 'CancelledError' })).toBe(true);
     });
 

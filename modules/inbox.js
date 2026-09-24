@@ -9,7 +9,7 @@
 // This file imports nothing.
 
 /**
- * Normalise the waiting-file list.
+ * Normalize the waiting-file list.
  *
  * The endpoint answers `null` rather than `[]` when nothing is waiting, which
  * is the shape that makes a caller reaching straight for .length throw.

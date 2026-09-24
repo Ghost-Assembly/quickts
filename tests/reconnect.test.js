@@ -151,7 +151,7 @@ describe('runWithReconnect', () => {
         ).resolves.toBeUndefined();
     });
 
-    it('stops without connecting when the token is already cancelled', async () => {
+    it('stops without connecting when the token is already canceled', async () => {
         const h = harness({ streams: [yields('never')] });
         h.token.cancel();
         await h.run();
@@ -160,7 +160,7 @@ describe('runWithReconnect', () => {
         expect(h.events).toEqual([]);
     });
 
-    it('stops mid-stream once cancelled', async () => {
+    it('stops mid-stream once canceled', async () => {
         const token = new CancelToken();
         const events = [];
 

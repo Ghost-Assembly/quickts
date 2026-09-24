@@ -63,14 +63,14 @@ describe('displayName', () => {
 });
 
 describe('isMullvad', () => {
-    it('recognises the tag', () => {
+    it('recognizes the tag', () => {
         expect(isMullvad(rawPeer({ Tags: [MULLVAD_TAG] }))).toBe(true);
     });
 
     // Tags is omitted entirely for an untagged peer, and this could not be
     // checked against a tailnet with Mullvad enabled, so either signal alone
     // is taken as enough rather than requiring both.
-    it('recognises a peer that only carries a location', () => {
+    it('recognizes a peer that only carries a location', () => {
         expect(isMullvad(rawPeer({ Location: { CountryCode: 'se' } }))).toBe(true);
     });
 
@@ -160,7 +160,7 @@ describe('normalisePeer', () => {
         ['null', null],
         ['undefined', undefined],
         ['an empty object', {}],
-    ])('normalises %s without throwing', (_reason, peer) => {
+    ])('normalizes %s without throwing', (_reason, peer) => {
         expect(() => normalisePeer(peer)).not.toThrow();
     });
 

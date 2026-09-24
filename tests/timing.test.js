@@ -97,7 +97,7 @@ describe('flushDelay', () => {
         expect(flushDelay({ firstSignalAt: 0, lastSignalAt: 0, now: 100000 })).toBe(0);
     });
 
-    it('honours overridden windows', () => {
+    it('honors overridden windows', () => {
         expect(
             flushDelay({
                 firstSignalAt: 0,

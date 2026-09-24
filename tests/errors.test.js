@@ -30,7 +30,7 @@ describe('TransportError', () => {
         );
     });
 
-    it('is recognisable across a realm boundary', () => {
+    it('is recognizable across a realm boundary', () => {
         expect(new TransportError(REASON.HTTP, 'x').name).toBe('TransportError');
     });
 });

@@ -112,7 +112,7 @@ describe('QuickTSExtension', () => {
         extension.disable();
     });
 
-    // Every piece must share one token, or cancelling would only reach some of
+    // Every piece must share one token, or canceling would only reach some of
     // them and the rest would keep running against a torn-down transport.
     it('gives the transport the same token it cancels', async () => {
         const { extension } = await load();

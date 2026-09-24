@@ -8,7 +8,7 @@
 
 import { FakeActor } from '../support/actors.js';
 
-/** Records the gesture so a test can recognise it and fire it. */
+/** Records the gesture so a test can recognize it and fire it. */
 class Gesture extends FakeActor {
     _init(props = {}) {
         super._init(props);

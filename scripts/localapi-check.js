@@ -52,7 +52,7 @@ async function checkStatus(client) {
         return;
     }
 
-    // The fields modules/peers.js normalises. These are exactly the ones the
+    // The fields modules/peers.js normalizes. These are exactly the ones the
     // replaced extension had to re-derive from the IPN bus, and got wrong.
     for (const key of [
         'ID',
@@ -215,18 +215,18 @@ async function checkStreamCancels(io, token) {
     }
 
     // A read blocked on a quiet bus must come back promptly once the token is
-    // cancelled, and must report cancellation rather than failure — otherwise
+    // canceled, and must report cancellation rather than failure — otherwise
     // every disable() would log an error.
     const blocked = stream.next();
     token.cancel();
 
     try {
         const next = await blocked;
-        check(next.done, 'a cancelled stream ends rather than hanging');
+        check(next.done, 'a canceled stream ends rather than hanging');
     } catch (error) {
         check(
             isCancelled(error),
-            'a cancelled stream reports cancellation, not failure',
+            'a canceled stream reports cancellation, not failure',
         );
     }
 }
@@ -250,13 +250,13 @@ async function checkDelaySettlesOnCancel() {
 
     try {
         await waiting;
-        fail('a cancelled delay resolved instead of rejecting');
+        fail('a canceled delay resolved instead of rejecting');
     } catch (error) {
         const elapsed = (GLib.get_monotonic_time() - started) / 1000;
-        check(isCancelled(error), 'a cancelled delay rejects with CancelledError');
+        check(isCancelled(error), 'a canceled delay rejects with CancelledError');
         check(
             elapsed < 5000,
-            `a cancelled delay settles promptly (${Math.round(elapsed)}ms)`,
+            `a canceled delay settles promptly (${Math.round(elapsed)}ms)`,
         );
     }
 

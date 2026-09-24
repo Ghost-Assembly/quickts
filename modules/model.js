@@ -135,7 +135,7 @@ export class TailscaleModel {
             void this.refresh({ peers: true, prefs: false });
     }
 
-    /** Read everything, then follow the bus until the token is cancelled. */
+    /** Read everything, then follow the bus until the token is canceled. */
     async start() {
         await this.refresh({ peers: true, profiles: true });
         void this.#watch();
@@ -473,7 +473,7 @@ export class TailscaleModel {
         }
     }
 
-    /** Follow the IPN bus until the token is cancelled. */
+    /** Follow the IPN bus until the token is canceled. */
     #watch() {
         return runWithReconnect({
             token: this.#token,
