@@ -8,7 +8,7 @@
 // This file imports only other pure modules.
 
 import { REASON } from './errors.js';
-import { exitNodeOf, normalisePeers, sortNodes } from './peers.js';
+import { exitNodeOf, normalizePeers, sortNodes } from './peers.js';
 
 /** BackendState strings, from ipn/backend.go's stateStrings. */
 export const BACKEND = Object.freeze({
@@ -114,7 +114,7 @@ export function applyStatus(state, status) {
     const nodes =
         status?.Peer === null || status?.Peer === undefined
             ? state.nodes
-            : normalisePeers(status.Peer, {
+            : normalizePeers(status.Peer, {
                   exitNodeId: state.exitNodeId,
                   magicDNSSuffix: status?.MagicDNSSuffix ?? state.magicDNSSuffix,
               });

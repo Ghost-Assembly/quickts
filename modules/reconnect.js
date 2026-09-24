@@ -4,7 +4,7 @@
 // the clock and the schedule as arguments — so the entire retry behavior is
 // exercised in Vitest on plain Node, with no timers and no sockets.
 
-import { isCancelled } from './cancel.js';
+import { isCanceled } from './cancel.js';
 
 /**
  * Consume a stream, reconnecting until canceled.
@@ -50,10 +50,10 @@ export async function runWithReconnect({
 }) {
     let attempt = 0;
 
-    while (!token.cancelled) {
+    while (!token.canceled) {
         const outcome = await consumeStream({ token, connect, onEvent, onError });
 
-        if (outcome === STREAM.CANCELLED || token.cancelled) return;
+        if (outcome === STREAM.CANCELED || token.canceled) return;
         if (outcome === STREAM.PRODUCTIVE) attempt = 0;
 
         try {
@@ -74,7 +74,7 @@ const STREAM = Object.freeze({
     /** It connected and delivered nothing, or failed. */
     BARREN: 'barren',
     /** The token was canceled; the loop should stop. */
-    CANCELLED: 'cancelled',
+    CANCELED: 'canceled',
 });
 
 /**
@@ -100,15 +100,15 @@ async function consumeStream({ token, connect, onEvent, onError }) {
         // throwing through it, calls the generator's return(), which runs the
         // finally that closes the stream.
         for await (const event of connect()) {
-            if (token.cancelled) return STREAM.CANCELLED;
+            if (token.canceled) return STREAM.CANCELED;
 
             productive = true;
             onEvent(event);
         }
     } catch (error) {
-        // Checked before isCancelled, so a Gio cancellation that escaped
+        // Checked before isCanceled, so a Gio cancellation that escaped
         // untranslated still ends the loop rather than being retried.
-        if (token.cancelled || isCancelled(error)) return STREAM.CANCELLED;
+        if (token.canceled || isCanceled(error)) return STREAM.CANCELED;
 
         onError(error);
     }

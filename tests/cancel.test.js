@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CancelToken, CancelledError, isCancelled } from '../modules/cancel.js';
+import { CancelToken, CanceledError, isCanceled } from '../modules/cancel.js';
 
 describe('CancelToken', () => {
     it('starts uncanceled', () => {
-        expect(new CancelToken().cancelled).toBe(false);
+        expect(new CancelToken().canceled).toBe(false);
     });
 
     it('reports cancellation', () => {
         const token = new CancelToken();
         token.cancel();
 
-        expect(token.cancelled).toBe(true);
+        expect(token.canceled).toBe(true);
     });
 
     it('runs callbacks on cancel', () => {
@@ -117,30 +117,30 @@ describe('CancelToken', () => {
     it('throws only once canceled', () => {
         const token = new CancelToken();
 
-        expect(() => token.throwIfCancelled()).not.toThrow();
+        expect(() => token.throwIfCanceled()).not.toThrow();
 
         token.cancel();
 
-        expect(() => token.throwIfCancelled()).toThrow(CancelledError);
+        expect(() => token.throwIfCanceled()).toThrow(CanceledError);
     });
 });
 
-describe('isCancelled', () => {
-    it('recognizes a CancelledError', () => {
-        expect(isCancelled(new CancelledError())).toBe(true);
+describe('isCanceled', () => {
+    it('recognizes a CanceledError', () => {
+        expect(isCanceled(new CanceledError())).toBe(true);
     });
 
     // Survives a second realm, where instanceof does not.
     it('recognizes anything carrying the name', () => {
-        expect(isCancelled({ name: 'CancelledError' })).toBe(true);
+        expect(isCanceled({ name: 'CanceledError' })).toBe(true);
     });
 
     it.each([
         ['a plain error', new Error('connection refused')],
         ['null', null],
         ['undefined', undefined],
-        ['a string', 'cancelled'],
+        ['a string', 'canceled'],
     ])('does not mistake %s for cancellation', (_reason, value) => {
-        expect(isCancelled(value)).toBe(false);
+        expect(isCanceled(value)).toBe(false);
     });
 });

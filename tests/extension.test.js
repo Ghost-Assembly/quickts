@@ -118,11 +118,11 @@ describe('QuickTSExtension', () => {
         const { extension } = await load();
 
         extension.enable();
-        expect(ioToken.cancelled).toBe(false);
+        expect(ioToken.canceled).toBe(false);
 
         extension.disable();
 
-        expect(ioToken.cancelled).toBe(true);
+        expect(ioToken.canceled).toBe(true);
     });
 
     it('disposes the transport', async () => {

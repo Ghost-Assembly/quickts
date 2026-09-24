@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CancelledError } from '../modules/cancel.js';
+import { CanceledError } from '../modules/cancel.js';
 import { REASON, TransportError } from '../modules/errors.js';
 import { PEERS_STALE_MS, TailscaleModel } from '../modules/model.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
@@ -517,7 +517,7 @@ describe('bus updates reaching the state', () => {
     it('does not record a cancellation as an error', async () => {
         const { model, daemon } = setup();
         await model.start();
-        daemon.failures.set('/localapi/v0/prefs', new CancelledError());
+        daemon.failures.set('/localapi/v0/prefs', new CanceledError());
 
         await model.refresh();
 
@@ -609,7 +609,7 @@ describe('races against a disable', () => {
     it('reports a canceled ping as no reply rather than a failure', async () => {
         const { model, daemon } = setup();
         await model.start();
-        daemon.failures.set('/localapi/v0/ping', new CancelledError());
+        daemon.failures.set('/localapi/v0/ping', new CanceledError());
 
         const result = await model.ping('100.64.0.1');
 
@@ -620,7 +620,7 @@ describe('races against a disable', () => {
     it('reports a canceled save as neither saved nor failed', async () => {
         const { model, daemon } = setup();
         await model.start();
-        daemon.failures.set('/localapi/v0/files/a.txt', new CancelledError());
+        daemon.failures.set('/localapi/v0/files/a.txt', new CanceledError());
 
         expect(await model.saveFile('a.txt')).toEqual({ path: '', error: '' });
         expect(daemon.deleted).toEqual([]);
@@ -739,7 +739,7 @@ describe('sending files', () => {
         daemon.client.putFile = vi
             .fn()
             .mockResolvedValueOnce(undefined)
-            .mockRejectedValueOnce(new CancelledError());
+            .mockRejectedValueOnce(new CanceledError());
 
         const result = await model.sendFiles('nA', [
             'file:///a.txt',

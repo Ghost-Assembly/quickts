@@ -8,7 +8,7 @@
 
 import GLib from 'gi://GLib';
 
-import { CancelToken, isCancelled } from '../modules/cancel.js';
+import { CancelToken, isCanceled } from '../modules/cancel.js';
 import { createIo } from '../modules/io.js';
 import {
     currentProfileRequest,
@@ -224,10 +224,7 @@ async function checkStreamCancels(io, token) {
         const next = await blocked;
         check(next.done, 'a canceled stream ends rather than hanging');
     } catch (error) {
-        check(
-            isCancelled(error),
-            'a canceled stream reports cancellation, not failure',
-        );
+        check(isCanceled(error), 'a canceled stream reports cancellation, not failure');
     }
 }
 
@@ -253,7 +250,7 @@ async function checkDelaySettlesOnCancel() {
         fail('a canceled delay resolved instead of rejecting');
     } catch (error) {
         const elapsed = (GLib.get_monotonic_time() - started) / 1000;
-        check(isCancelled(error), 'a canceled delay rejects with CancelledError');
+        check(isCanceled(error), 'a canceled delay rejects with CanceledError');
         check(
             elapsed < 5000,
             `a canceled delay settles promptly (${Math.round(elapsed)}ms)`,

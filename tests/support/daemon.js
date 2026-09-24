@@ -5,7 +5,7 @@
 // reconnect loop, the refresh policy and the failure handling included — runs
 // under Vitest with no stubs at all.
 
-import { CancelToken, CancelledError } from '../../modules/cancel.js';
+import { CancelToken, CanceledError } from '../../modules/cancel.js';
 import { SUFFIX, rawPeer, rawPeerMap } from '../fixtures/peers.js';
 
 /**
@@ -209,7 +209,7 @@ export function createScheduler(token, clock) {
         scheduler: {
             delay(ms) {
                 waits.push(ms);
-                if (token.cancelled) return Promise.reject(new CancelledError());
+                if (token.canceled) return Promise.reject(new CanceledError());
 
                 clock.advance(ms);
 

@@ -15,7 +15,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
-import { CancelledError } from './cancel.js';
+import { CanceledError } from './cancel.js';
 import { REASON, TransportError } from './errors.js';
 import { uniqueName } from './inbox.js';
 import { HOST, SOCKET_PATHS, pickSocket } from './localapi.js';
@@ -53,15 +53,15 @@ const REQUEST = 'org.freedesktop.portal.Request';
  * that wrong would make every disable() log an error.
  *
  * @param {unknown} error Caught value.
- * @returns {Error} A CancelledError or a TransportError.
+ * @returns {Error} A CanceledError or a TransportError.
  */
 function translate(error) {
-    if (error?.name === 'CancelledError' || error?.name === 'TransportError')
+    if (error?.name === 'CanceledError' || error?.name === 'TransportError')
         return error;
 
     if (error instanceof Gio.IOErrorEnum || typeof error?.matches === 'function') {
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-            return new CancelledError();
+            return new CanceledError();
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
             return transportError(REASON.SOCKET_MISSING, error);
         if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_REFUSED))
@@ -231,7 +231,7 @@ export function createIo({ token }) {
                 REASON.SOCKET_MISSING,
                 `no tailscaled socket at ${SOCKET_PATHS.join(' or ')}`,
             );
-        token.throwIfCancelled();
+        token.throwIfCanceled();
     };
 
     const build = ({ method, path, body }) => {
@@ -413,8 +413,8 @@ export function createIo({ token }) {
          */
         chooseFiles({ title = 'Select files', multiple = true } = {}) {
             return new Promise((resolve, reject) => {
-                if (token.cancelled) {
-                    reject(new CancelledError());
+                if (token.canceled) {
+                    reject(new CanceledError());
                     return;
                 }
 
@@ -564,8 +564,8 @@ export function createIo({ token }) {
              */
             delay(ms) {
                 return new Promise((resolve, reject) => {
-                    if (token.cancelled) {
-                        reject(new CancelledError());
+                    if (token.canceled) {
+                        reject(new CanceledError());
                         return;
                     }
 
@@ -580,7 +580,7 @@ export function createIo({ token }) {
 
                     off = token.onCancel(() => {
                         if (sources.delete(id)) GLib.Source.remove(id);
-                        reject(new CancelledError());
+                        reject(new CanceledError());
                     });
                 });
             },

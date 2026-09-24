@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CancelToken, CancelledError } from '../modules/cancel.js';
+import { CancelToken, CanceledError } from '../modules/cancel.js';
 import { runWithReconnect } from '../modules/reconnect.js';
 
 /**
@@ -41,7 +41,7 @@ function harness({ streams, stopAfter = Infinity }) {
                     delays.push(ms);
                     if (delays.length >= stopAfter) {
                         token.cancel();
-                        return Promise.reject(new CancelledError());
+                        return Promise.reject(new CanceledError());
                     }
                     return Promise.resolve();
                 },
@@ -144,7 +144,7 @@ describe('runWithReconnect', () => {
                 onError: () => {},
                 delay: () => {
                     token.cancel();
-                    return Promise.reject(new CancelledError());
+                    return Promise.reject(new CanceledError());
                 },
                 backoff: () => 1000,
             }),
@@ -189,7 +189,7 @@ describe('runWithReconnect', () => {
             token,
             connect: async function* () {
                 token.cancel();
-                throw new CancelledError();
+                throw new CanceledError();
                 // eslint-disable-next-line no-unreachable
                 yield '';
             },

@@ -6,8 +6,8 @@ import {
     exitNodeOf,
     iconNameFor,
     isMullvad,
-    normalisePeer,
-    normalisePeers,
+    normalizePeer,
+    normalizePeers,
     sortNodes,
 } from '../modules/peers.js';
 import { SUFFIX, rawPeer, rawPeerMap } from './fixtures/peers.js';
@@ -109,9 +109,9 @@ describe('iconNameFor', () => {
     });
 });
 
-describe('normalisePeer', () => {
+describe('normalizePeer', () => {
     it('produces the shape the rest of QuickTS uses', () => {
-        const node = normalisePeer(rawPeer(), { magicDNSSuffix: SUFFIX });
+        const node = normalizePeer(rawPeer(), { magicDNSSuffix: SUFFIX });
 
         expect(node).toMatchObject({
             id: 'nSOMEID1CNTRL',
@@ -132,20 +132,20 @@ describe('normalisePeer', () => {
     it('marks the exit node from the preference, not the peer', () => {
         const peer = rawPeer({ ExitNode: false });
 
-        expect(normalisePeer(peer, { exitNodeId: 'nSOMEID1CNTRL' }).isExitNode).toBe(
+        expect(normalizePeer(peer, { exitNodeId: 'nSOMEID1CNTRL' }).isExitNode).toBe(
             true,
         );
     });
 
     it('does not mark a peer whose id is empty', () => {
-        expect(normalisePeer(rawPeer({ ID: '' }), { exitNodeId: '' }).isExitNode).toBe(
+        expect(normalizePeer(rawPeer({ ID: '' }), { exitNodeId: '' }).isExitNode).toBe(
             false,
         );
     });
 
     // Online is omitted rather than set false for a peer never reached.
     it('treats an absent Online as offline', () => {
-        expect(normalisePeer(rawPeer({ Online: undefined })).online).toBe(false);
+        expect(normalizePeer(rawPeer({ Online: undefined })).online).toBe(false);
     });
 
     // Where upstream's empty rows came from: a peer with no addresses yet.
@@ -153,7 +153,7 @@ describe('normalisePeer', () => {
         ['absent TailscaleIPs', { TailscaleIPs: undefined }],
         ['null TailscaleIPs', { TailscaleIPs: null }],
     ])('gives %s an empty address list rather than undefined', (_reason, overrides) => {
-        expect(normalisePeer(rawPeer(overrides)).ips).toEqual([]);
+        expect(normalizePeer(rawPeer(overrides)).ips).toEqual([]);
     });
 
     it.each([
@@ -161,23 +161,23 @@ describe('normalisePeer', () => {
         ['undefined', undefined],
         ['an empty object', {}],
     ])('normalizes %s without throwing', (_reason, peer) => {
-        expect(() => normalisePeer(peer)).not.toThrow();
+        expect(() => normalizePeer(peer)).not.toThrow();
     });
 
     it('carries the taildrop number through untouched', () => {
-        expect(normalisePeer(rawPeer({ TaildropTarget: 9 })).taildropTarget).toBe(9);
+        expect(normalizePeer(rawPeer({ TaildropTarget: 9 })).taildropTarget).toBe(9);
     });
 
     it('defaults a missing taildrop number to unknown', () => {
         expect(
-            normalisePeer(rawPeer({ TaildropTarget: undefined })).taildropTarget,
+            normalizePeer(rawPeer({ TaildropTarget: undefined })).taildropTarget,
         ).toBe(0);
     });
 });
 
-describe('normalisePeers', () => {
+describe('normalizePeers', () => {
     it('reads the peer map', () => {
-        const nodes = normalisePeers(
+        const nodes = normalizePeers(
             rawPeerMap(
                 rawPeer({ DNSName: `b.${SUFFIX}.` }),
                 rawPeer({ DNSName: `a.${SUFFIX}.` }),
@@ -194,7 +194,7 @@ describe('normalisePeers', () => {
         ['undefined', undefined],
         ['an empty map', {}],
     ])('returns an empty list for %s', (_reason, peers) => {
-        expect(normalisePeers(peers)).toEqual([]);
+        expect(normalizePeers(peers)).toEqual([]);
     });
 });
 

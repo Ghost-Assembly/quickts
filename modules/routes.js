@@ -25,7 +25,7 @@ export const EXIT_ROUTES = Object.freeze(['0.0.0.0/0', '::/0']);
  * @returns {boolean} True if both default routes are present.
  */
 export function advertisesExitNode(routes) {
-    const list = normaliseRoutes(routes);
+    const list = normalizeRoutes(routes);
 
     return EXIT_ROUTES.every(route => list.includes(route));
 }
@@ -37,7 +37,7 @@ export function advertisesExitNode(routes) {
  * @returns {string[]} Everything that is not a default route.
  */
 export function subnetRoutes(routes) {
-    return normaliseRoutes(routes).filter(route => !isDefaultRoute(route));
+    return normalizeRoutes(routes).filter(route => !isDefaultRoute(route));
 }
 
 /**
@@ -66,7 +66,7 @@ export function withExitNode(routes, enabled) {
 export function withSubnets(routes, subnets) {
     const exit = advertisesExitNode(routes) ? EXIT_ROUTES : [];
 
-    return [...normaliseRoutes(subnets).filter(r => !isDefaultRoute(r)), ...exit];
+    return [...normalizeRoutes(subnets).filter(r => !isDefaultRoute(r)), ...exit];
 }
 
 /**
@@ -92,7 +92,7 @@ function isDefaultRoute(route) {
  * @param {string[]|null} routes Possibly-absent list.
  * @returns {string[]} A usable list.
  */
-function normaliseRoutes(routes) {
+function normalizeRoutes(routes) {
     if (!Array.isArray(routes)) return [];
 
     return routes.map(route => String(route).trim()).filter(Boolean);

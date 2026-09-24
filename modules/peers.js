@@ -1,6 +1,6 @@
 // The one shape a node has in QuickTS.
 //
-// Every peer in the extension comes through normalisePeer, and the only input
+// Every peer in the extension comes through normalizePeer, and the only input
 // it accepts is a peer from /localapi/v0/status. Nothing else in the codebase
 // reads a raw peer field, so there is exactly one place where Tailscale's
 // spelling meets ours — see modules/bus.js for what happens to a codebase that
@@ -97,7 +97,7 @@ export function iconNameFor(node) {
  * @param {string} [context.magicDNSSuffix] The tailnet's DNS suffix.
  * @returns {object} A normalized node.
  */
-export function normalisePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {}) {
+export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {}) {
     const id = peer?.ID ?? '';
     const node = {
         id,
@@ -140,14 +140,14 @@ export function normalisePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
  * empty on a single-node tailnet and whenever ?peers=false was used.
  *
  * @param {object|null} rawPeers The Peer field from /status.
- * @param {object} [context] Passed through to {@link normalisePeer}.
+ * @param {object} [context] Passed through to {@link normalizePeer}.
  * @returns {object[]} Normalized nodes, sorted.
  */
-export function normalisePeers(rawPeers, context = {}) {
+export function normalizePeers(rawPeers, context = {}) {
     const peers =
         rawPeers && typeof rawPeers === 'object' ? Object.values(rawPeers) : [];
 
-    return sortNodes(peers.map(peer => normalisePeer(peer, context)));
+    return sortNodes(peers.map(peer => normalizePeer(peer, context)));
 }
 
 /**

@@ -19,7 +19,7 @@
 // This file imports only other pure modules.
 
 import { NOTHING_DIRTY, dirtyFrom, isDirty, mergeDirty, parseBusLine } from './bus.js';
-import { isCancelled } from './cancel.js';
+import { isCanceled } from './cancel.js';
 import { messageFor, reasonOf } from './errors.js';
 import {
     currentProfileRequest,
@@ -225,7 +225,7 @@ export class TailscaleModel {
                 await this.#client.putFile(filePutRequest(stableId, name), uri);
                 result.sent += 1;
             } catch (error) {
-                if (isCancelled(error)) break;
+                if (isCanceled(error)) break;
                 result.failed.push(name);
             }
         }
@@ -249,7 +249,7 @@ export class TailscaleModel {
         try {
             return describePing(await this.#request(pingRequest(ip, PING_TYPE.DISCO)));
         } catch (error) {
-            if (isCancelled(error)) return describePing(null);
+            if (isCanceled(error)) return describePing(null);
 
             // Deliberately not routed through #fail. A peer that will not
             // answer is a fact about that peer, not evidence that the daemon
@@ -270,7 +270,7 @@ export class TailscaleModel {
         try {
             return waitingFiles(await this.#request(waitingFilesRequest()));
         } catch (error) {
-            if (!isCancelled(error)) this.#fail(error);
+            if (!isCanceled(error)) this.#fail(error);
             return [];
         }
     }
@@ -292,7 +292,7 @@ export class TailscaleModel {
 
             return { path, error: '' };
         } catch (error) {
-            if (isCancelled(error)) return { path: '', error: '' };
+            if (isCanceled(error)) return { path: '', error: '' };
 
             return { path: '', error: messageFor(reasonOf(error)) };
         }
@@ -325,7 +325,7 @@ export class TailscaleModel {
         } catch (error) {
             // A tailnet with no candidate answers with an error rather than an
             // empty suggestion, and that is not a fault worth reporting.
-            if (!isCancelled(error))
+            if (!isCanceled(error))
                 console.debug(`[quickts] no exit node suggestion: ${error}`);
 
             return none;
@@ -542,7 +542,7 @@ export class TailscaleModel {
                 await this.#read(dirty);
             }
         } catch (error) {
-            if (!isCancelled(error)) this.#fail(error);
+            if (!isCanceled(error)) this.#fail(error);
         } finally {
             this.#flushing = false;
         }
@@ -612,7 +612,7 @@ export class TailscaleModel {
      * @param {unknown} error Caught value.
      */
     #fail(error) {
-        if (this.#disposed || isCancelled(error)) return;
+        if (this.#disposed || isCanceled(error)) return;
 
         this.#commit(applyError(this.#state, reasonOf(error)));
     }
