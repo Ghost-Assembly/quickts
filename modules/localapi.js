@@ -17,8 +17,7 @@ export const HOST = 'local-tailscaled.sock';
  * Where tailscaled listens, most-preferred first.
  *
  * /run and /var/run are the same directory on any systemd distribution, but
- * they are not on every distribution QuickTS might be installed on, and the
- * extension it replaces hardcoded only the /var/run spelling.
+ * they are not on every distribution QuickTS might be installed on.
  */
 export const SOCKET_PATHS = Object.freeze([
     '/run/tailscale/tailscaled.sock',
@@ -93,9 +92,9 @@ export function prefsRequest() {
  * preference would read as its zero value and be reset.
  *
  * The capital S matters. Go's encoding/json matches field names
- * case-insensitively, so the lowercase `<Name>set` the previous extension sent
- * happened to work; encoding/json/v2, which tailscale is already part-way into
- * adopting, does not. Spelling the field the way ipn/prefs.go spells it costs
+ * case-insensitively, so a lowercase `<Name>set` happens to work;
+ * encoding/json/v2, which tailscale is already part-way into adopting, does
+ * not. Spelling the field the way ipn/prefs.go spells it costs
  * nothing and does not depend on that.
  *
  * @param {Record<string, unknown>} changes Preference names to new values.
@@ -120,10 +119,9 @@ export function profilesRequest() {
 /**
  * The profile currently in use.
  *
- * The previous extension had no equivalent and inferred the active profile by
- * comparing the live prefs' ControlURL and Config.UserProfile.ID against each
- * profile's — an expression that throws whenever a profile has no
- * NetworkProfile, which is upstream issue #42.
+ * Asked rather than inferred. Inferring the active profile means comparing
+ * the live prefs' ControlURL and Config.UserProfile.ID against each profile's,
+ * which throws whenever a profile has no NetworkProfile.
  *
  * @returns {{method: string, path: string}} Request descriptor.
  */

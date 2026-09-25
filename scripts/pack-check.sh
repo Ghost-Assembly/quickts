@@ -34,11 +34,11 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --extra-source takes a directory and recurses, so modules/ and icons/ go in
 # whole. That matters: naming files individually would silently drop a newly
-# added module. stylesheet.css is named explicitly because it is a single file.
+# added module. There is no stylesheet: nothing QuickTS draws needs styling
+# beyond the Shell's own, and pack picks one up by itself if one is added.
 gnome-extensions pack --force -o "$WORK" \
     --extra-source=modules \
     --extra-source=icons \
-    --extra-source=stylesheet.css \
     --schema="$SCHEMA" \
     . >/dev/null
 

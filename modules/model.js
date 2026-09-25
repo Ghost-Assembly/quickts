@@ -1,17 +1,15 @@
 // Everything QuickTS knows, and everything it can be asked to do.
 //
-// Deliberately NOT a GObject. That is the single largest departure from the
-// extension QuickTS replaces, and it retires two classes of defect outright:
+// Deliberately NOT a GObject, which retires two classes of defect outright:
 //
 //   There are no GObject properties, so there are no notify:: connections and
 //   no bind_property bindings for the menu to leak. There is one subscribe()
 //   per widget, each returning its own disposer, and modules/panel.js drains
-//   them in a flat array. Upstream connects a dozen handlers and binds two
-//   properties and disconnects none of them.
+//   them in a flat array.
 //
 //   Subscribers receive a whole consistent snapshot plus a list of what moved,
-//   so there is no per-property emission order to get wrong. Upstream emits
-//   notify::exit-node before computing the name that depends on it.
+//   so there is no per-property emission order to get wrong — no handler can
+//   read a name before the id it depends on has been applied.
 //
 // It also means the whole thing runs under Vitest with no stubs at all: the
 // client and the clock are injected, and neither has a GNOME type in it.

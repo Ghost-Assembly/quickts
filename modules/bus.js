@@ -4,17 +4,16 @@
 // changed. /status and /prefs tell us *what* it is. No value is ever read out
 // of a notification and shown to the user.
 //
-// That is not fastidiousness. The extension QuickTS replaces translates the
-// bus's NetMap peers into its own shape and renders them, and that shape
-// disagrees with the one /status returns for the same peers:
+// That is not fastidiousness. A bus peer is a tailcfg.Node, not the
+// ipnstate.PeerStatus /status returns, and translating one into the menu's
+// shape disagrees with /status for the same peers:
 //
 //   Tags            absent from a NetMap peer, so every Mullvad exit node
 //                   disappears the moment the first bus update arrives
-//                   (upstream issue #35)
-//   ExitNodeOption  re-derived by sniffing AllowedIPs for 0.0.0.0/0 rather
-//                   than read, so it disagrees with the daemon's own answer
-//   Online          means something different in each payload, which is where
-//                   the empty rows in upstream issue #28 come from
+//   ExitNodeOption  has to be re-derived by sniffing AllowedIPs for
+//                   0.0.0.0/0, and then disagrees with the daemon's answer
+//   Online          means something different in each payload, which is how
+//                   a menu ends up with empty rows
 //
 // Two translations of one dataset cannot be kept in agreement, so this file
 // offers no way to get a peer out of a notification. There is nothing to

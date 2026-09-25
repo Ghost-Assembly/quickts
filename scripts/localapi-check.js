@@ -66,8 +66,8 @@ async function checkStatus(client) {
         return;
     }
 
-    // The fields modules/peers.js normalizes. These are exactly the ones the
-    // replaced extension had to re-derive from the IPN bus, and got wrong.
+    // The fields modules/peers.js normalizes, which a bus peer does not carry
+    // in this shape — see modules/bus.js.
     for (const key of [
         'ID',
         'DNSName',
@@ -114,8 +114,8 @@ async function checkProfiles(client) {
     const profiles = await client.request(profilesRequest());
     check(Array.isArray(profiles), '/profiles/ returns an array');
 
-    // The endpoint the replaced extension did not use, leaving it to infer the
-    // active profile from prefs and throw when a profile had no NetworkProfile.
+    // Asked rather than inferred from prefs, which throws when a profile has
+    // no NetworkProfile.
     const current = await client.request(currentProfileRequest());
     check(has(current, 'ID'), '/profiles/current carries ID');
     check(
@@ -268,11 +268,11 @@ async function checkStreamCancels(io, token) {
     }
 }
 
-// The regression this whole design exists for. The replaced extension removes
-// the GLib source from disable() while its reconnect loop is awaiting that very
-// timeout, so the callback never runs and the promise never settles: the loop,
-// its generator, its input stream and its Soup session survive for the life of
-// the Shell. Here the wait must reject promptly instead.
+// The regression this whole design exists for. Removing the GLib source from
+// disable() while a reconnect loop is awaiting that very timeout means the
+// callback never runs and the promise never settles: the loop, its generator,
+// its input stream and its Soup session survive for the life of the Shell.
+// Here the wait must reject promptly instead.
 async function checkDelaySettlesOnCancel() {
     const token = new CancelToken();
     const io = createIo({ token });

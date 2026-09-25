@@ -70,9 +70,8 @@ const OPERATOR_COMMAND = 'sudo tailscale set --operator=$USER';
  * keeps it importable from Vitest. modules/panel.js runs the result through _().
  *
  * PERMISSION_DENIED is the one that earns its place. The daemon returns 403 to
- * a user who is not the tailscale operator, and the extension QuickTS replaces
- * logged that to the journal and rendered an empty, apparently-disconnected
- * menu — leaving no way to discover that one command fixes it.
+ * a user who is not the tailscale operator, and an empty, apparently
+ * disconnected menu would leave no way to discover that one command fixes it.
  *
  * @param {string} reason One of {@link REASON}.
  * @returns {string} A sentence for the menu.

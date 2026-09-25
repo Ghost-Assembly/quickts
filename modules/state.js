@@ -34,8 +34,6 @@ export function initialState() {
         health: [],
         magicDNSSuffix: '',
         tailnetName: '',
-        selfName: '',
-        selfIps: [],
 
         // From /prefs.
         running: false,
@@ -52,8 +50,7 @@ export function initialState() {
         advertiseRoutes: [],
 
         // Derived from exitNodeId and nodes. Never assigned directly; see
-        // derive(). Typed as a string throughout — upstream declares this a
-        // string GObject property and then assigns null to it.
+        // derive(). Typed as a string throughout, never null.
         exitNodeName: '',
 
         nodes: [],
@@ -67,11 +64,10 @@ export function initialState() {
 /**
  * Recompute everything that follows from something else.
  *
- * This is the whole reason exitNodeName cannot go stale. Upstream recomputes
- * the name only inside the branch that notices the *id* changed, and emits
- * notify::exit-node before computing it — so a handler reading the name during
- * that notification gets the previous one, and a peer list that arrives after
- * the preferences leaves the name empty until the id happens to change again.
+ * This is the whole reason exitNodeName cannot go stale. Recomputed only when
+ * the *id* changes, a name goes stale twice over: a handler told about the new
+ * id reads the old name, and a peer list that arrives after the preferences
+ * leaves the name empty until the id happens to change again.
  *
  * Here the name is not a field that is kept up to date. It is a function of
  * the snapshot, evaluated whenever the snapshot is rebuilt, so the two cannot
@@ -107,8 +103,6 @@ function derive(state) {
  * @returns {object} A new state.
  */
 export function applyStatus(state, status) {
-    const self = status?.Self ?? null;
-
     // ?peers=false answers with Peer: null, which must leave the nodes alone
     // rather than emptying the menu. An actually-empty tailnet sends {}.
     const nodes =
@@ -136,10 +130,6 @@ export function applyStatus(state, status) {
         // silently grow their tailnet suffix back.
         magicDNSSuffix: status?.MagicDNSSuffix ?? state.magicDNSSuffix,
         tailnetName: status?.CurrentTailnet?.Name ?? '',
-        selfName: self?.HostName ?? '',
-        selfIps: Object.freeze(
-            Array.isArray(self?.TailscaleIPs) ? [...self.TailscaleIPs] : [],
-        ),
 
         nodes,
     });
@@ -177,10 +167,9 @@ export function applyPrefs(state, prefs) {
  * Fold the profile list and the active profile into the state.
  *
  * The active profile is read from /profiles/current rather than inferred.
- * Upstream compares the live prefs' ControlURL and Config.UserProfile.ID
- * against each profile's — an expression that throws whenever a profile has no
- * NetworkProfile, and which it then never calls, because the line that should
- * rebuild the profile list calls the node updater instead.
+ * Inferring it means comparing the live prefs' ControlURL and
+ * Config.UserProfile.ID against each profile's, which throws whenever a
+ * profile has no NetworkProfile.
  *
  * @param {object} state Current state.
  * @param {object[]} profiles Parsed /profiles/ response.
@@ -200,8 +189,8 @@ export function applyProfiles(state, profiles, current = null) {
                 id: profile?.ID ?? '',
                 name: profile?.Name ?? '',
 
-                // NetworkProfile is omitempty, and dereferencing it without a
-                // guard is upstream issue #42.
+                // NetworkProfile is omitempty, so it is never dereferenced
+                // without a guard.
                 tailnet:
                     profile?.NetworkProfile?.DisplayName ??
                     profile?.NetworkProfile?.DomainName ??
@@ -236,9 +225,8 @@ export function applyError(state, reason) {
  *
  * Subscribers use this to decide whether they have anything to redraw. The
  * arrays are compared on the fields that are actually rendered rather than
- * with JSON.stringify, which upstream calls on the whole node list on every
- * netmap update — allocating a copy of the tailnet as a string to answer a
- * question about a handful of fields.
+ * with JSON.stringify, which on every netmap update would allocate a copy of
+ * the tailnet as a string to answer a question about a handful of fields.
  *
  * @param {object} previous Earlier snapshot.
  * @param {object} next Later snapshot.
@@ -253,7 +241,6 @@ export function changed(previous, next) {
     if (!sameStrings(previous.health, next.health)) fields.push('health');
     if (!sameStrings(previous.advertiseRoutes, next.advertiseRoutes))
         fields.push('advertiseRoutes');
-    if (!sameStrings(previous.selfIps, next.selfIps)) fields.push('selfIps');
     if (!sameNodes(previous.nodes, next.nodes)) fields.push('nodes');
     if (!sameProfiles(previous.profiles, next.profiles)) fields.push('profiles');
 
@@ -270,7 +257,6 @@ const SCALARS = Object.freeze([
     ['authUrl', s => s.authUrl],
     ['magicDNSSuffix', s => s.magicDNSSuffix],
     ['tailnetName', s => s.tailnetName],
-    ['selfName', s => s.selfName],
     ['running', s => s.running],
     ['acceptRoutes', s => s.acceptRoutes],
     ['acceptDNS', s => s.acceptDNS],

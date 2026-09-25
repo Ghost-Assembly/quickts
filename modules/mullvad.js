@@ -12,12 +12,9 @@
 // convention, and if that fails too the node still appears, just ungrouped.
 // Nothing throws and nothing disappears.
 //
-// This file imports nothing.
+// This file imports only other pure modules.
 
-// One collator, built once. Its compare() orders exactly as localeCompare()
-// does, but a bare localeCompare() call resolves a collator every time — and
-// these comparators run over several thousand Mullvad nodes.
-const collator = new Intl.Collator();
+import { compareNames } from './collate.js';
 
 /** Where a node goes when its country cannot be determined. */
 export const UNKNOWN_COUNTRY = Object.freeze({
@@ -137,7 +134,7 @@ export function groupByCountry(nodes) {
     // reading the list.
     for (const group of groups.values()) {
         const cities = new Map(group.nodes.map(node => [node, cityOf(node)]));
-        group.nodes.sort((a, b) => collator.compare(cities.get(a), cities.get(b)));
+        group.nodes.sort((a, b) => compareNames(cities.get(a), cities.get(b)));
     }
 
     return [...groups.values()]
@@ -148,7 +145,7 @@ export function groupByCountry(nodes) {
                 // "Other" last, whatever it is called.
                 Number(a.group.country.code === '') -
                     Number(b.group.country.code === '') ||
-                collator.compare(a.group.country.name, b.group.country.name),
+                compareNames(a.group.country.name, b.group.country.name),
         )
         .map(({ group }) => group);
 }

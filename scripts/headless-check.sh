@@ -3,11 +3,11 @@
 # it enables cleanly, disables cleanly, and can be enabled again without
 # leaking.
 #
-# The enable/disable/enable cycle is the point. It is the exact shape of the bug
-# in the extension QuickTS replaces: its watch loop awaits a GLib timeout that
-# disable() removes out from under it, so the promise never settles, the loop
-# never returns, and the Soup session and its input stream stay alive for the
-# rest of the session. A single enable would never show it.
+# The enable/disable/enable cycle is the point. It is the shape of the classic
+# extension leak: a watch loop awaiting a GLib timeout that disable() removes
+# out from under it, so the promise never settles, the loop never returns, and
+# the Soup session and its input stream stay alive for the rest of the session.
+# A single enable would never show it.
 #
 # This needs a real gnome-shell and so runs locally only; GitHub's runners have
 # no GNOME 50.
@@ -52,8 +52,7 @@ LOG="$WORK/shell.log"
 EXT_DIR="$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
 mkdir -p "$EXT_DIR"
 cp -r "$REPO_ROOT"/metadata.json "$REPO_ROOT"/extension.js "$REPO_ROOT"/prefs.js \
-      "$REPO_ROOT"/stylesheet.css "$REPO_ROOT"/modules "$REPO_ROOT"/schemas \
-      "$REPO_ROOT"/icons "$EXT_DIR/"
+      "$REPO_ROOT"/modules "$REPO_ROOT"/schemas "$REPO_ROOT"/icons "$EXT_DIR/"
 glib-compile-schemas "$EXT_DIR/schemas"
 
 gsettings set org.gnome.shell disable-user-extensions false
@@ -142,8 +141,7 @@ if grep -qaiE 'No signal handler|instance with invalid|Object .* has been alread
 fi
 
 # The watch loop must not survive its disable. A source removed without its
-# awaiter being settled shows up here, and this is the assertion the replaced
-# extension would fail.
+# awaiter being settled shows up here.
 if grep -qaiE 'Source ID .* was not found|GSource .* still active' "$LOG"; then
     fail "a GLib source outlived its disable"
 fi

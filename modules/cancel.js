@@ -5,11 +5,11 @@
 // there is nothing on the platform to use here and the type is ours to define.
 //
 // The whole point of it is the pairing in `onCancel`. Canceling must both
-// release the resource *and* settle whatever was waiting on it. The extension
-// QuickTS replaces does only the first: disable() removes the GLib timeout that
-// its reconnect loop is awaiting, the timeout's callback therefore never runs,
-// the promise never settles, and the loop, its async generator, its input
-// stream and its Soup session all stay alive until the Shell restarts.
+// release the resource *and* settle whatever was waiting on it. Doing only the
+// first — removing a GLib timeout a reconnect loop is awaiting — means the
+// callback never runs, the promise never settles, and the loop, its async
+// generator, its input stream and its Soup session all stay alive until the
+// Shell restarts.
 
 /** Thrown by anything that was waiting when the token was canceled. */
 export class CanceledError extends Error {

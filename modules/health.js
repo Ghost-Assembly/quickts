@@ -4,9 +4,8 @@
 // human-readable warnings — "Some peers are advertising routes but
 // --accept-routes is false", "SELinux is enabled; Tailscale SSH may not work"
 // — and a BackendState that says whether the daemon is running, starting or
-// waiting to be logged in. The extension QuickTS replaces reads neither, which
-// is why its toggle can sit there showing "on" while the backend waits for a
-// login that nothing in the menu offers.
+// waiting to be logged in. Reading neither is how a toggle sits there showing
+// "on" while the backend waits for a login that nothing in the menu offers.
 //
 // Nothing here is translated, for the same reason nothing here imports: this
 // file has to be loadable from Vitest. It returns a kind and a value, and
@@ -46,9 +45,8 @@ export const SUMMARY = Object.freeze({
 /**
  * Whether the daemon is waiting for someone to log in.
  *
- * This is the state upstream cannot represent, because it reads only
- * WantRunning from the preferences. WantRunning stays true across a logout, so
- * its toggle shows "on" against a backend that is doing nothing.
+ * WantRunning alone cannot represent this: it stays true across a logout, so
+ * a toggle driven by it shows "on" against a backend that is doing nothing.
  *
  * @param {object} state A snapshot.
  * @returns {boolean} True if an interactive login would help.
@@ -156,9 +154,8 @@ export function summaryOf(state) {
  * The message for an unreachable daemon, and whether it is worth a row of its own.
  *
  * A permission failure is the one worth interrupting for: tailscaled answers
- * 403 to anyone who is not the tailscale operator, and one command fixes it.
- * Upstream logs that to the journal and draws an empty menu, so the fix is
- * discoverable only by reading its source.
+ * 403 to anyone who is not the tailscale operator, and one command fixes it —
+ * a command nobody would otherwise discover from an empty menu.
  *
  * @param {object} state A snapshot.
  * @returns {{message: string, command: string, actionable: boolean}|null} What

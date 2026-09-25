@@ -8,9 +8,8 @@
 //
 // Teardown is the part worth reading. Every subscription, signal and
 // keybinding is recorded in a named field or a flat array and released in
-// disable(), because the review guidelines require it and because the
-// extension QuickTS replaces connects a dozen handlers and two property
-// bindings and disconnects none of them.
+// disable(), because the review guidelines require it and because anything
+// left connected keeps the whole extension alive across a lock.
 
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
@@ -1087,8 +1086,7 @@ const QuickTSToggle = GObject.registerClass(
          * the scrollbar "will only take effect if a CSS max-height is set on
          * the top menu", and PopupSubMenu._needsScrollbar reads exactly that
          * from the theme node. So this sets the max-height and touches nothing
-         * private — where the replaced extension hardcodes a height and
-         * overwrites _needsScrollbar itself.
+         * private.
          */
         _applyMaxHeight() {
             const monitor = Main.layoutManager.primaryIndex;
@@ -1228,9 +1226,8 @@ export class Panel {
         this._indicator.quickSettingsItems.push(this._toggle);
 
         // The supported placement API, which puts the tile where the Shell
-        // wants it relative to brightness and background apps. The replaced
-        // extension reaches into _indicators and inserts at index 0, which is
-        // upstream issue #41.
+        // wants it relative to brightness and background apps, rather than
+        // reaching into the private _indicators list.
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
 
         this._disposers.push(
@@ -1384,9 +1381,8 @@ function addDisabledRow(menu, text) {
  *
  * GNOME 49 changed OsdWindowManager: show() now takes (icon, label, levels)
  * and showOne() is the call js/ui/windowManager.js itself uses for a text OSD.
- * The replaced extension calls the pre-49 five-argument form and passes -1
- * where an icon belongs. That history is why this lives in one function: the
- * next time the signature moves there is a single call to fix.
+ * The signature has moved before, which is why this lives in one function:
+ * the next time it moves there is a single call to fix.
  *
  * @param {object} gicon Icon to show beside the message.
  * @param {string} message What to say.

@@ -63,7 +63,6 @@ describe('applyStatus', () => {
             backendState: BACKEND.RUNNING,
             magicDNSSuffix: SUFFIX,
             tailnetName: 'example@example.com',
-            selfName: 'desktop',
         });
         expect(state.nodes).toHaveLength(1);
     });

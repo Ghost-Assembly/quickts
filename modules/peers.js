@@ -6,12 +6,9 @@
 // spelling meets ours — see modules/bus.js for what happens to a codebase that
 // has two.
 //
-// This file imports nothing.
+// This file imports only other pure modules.
 
-// One collator, built once. Its compare() orders exactly as localeCompare()
-// does, but a bare localeCompare() call resolves a collator every time — and
-// this comparator runs over the whole tailnet.
-const collator = new Intl.Collator();
+import { compareNames } from './collate.js';
 
 /** Tag Tailscale puts on a Mullvad exit node. */
 export const MULLVAD_TAG = 'tag:mullvad-exit-node';
@@ -109,7 +106,6 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
     const node = {
         id,
         name: displayName(peer, magicDNSSuffix),
-        hostName: peer?.HostName ?? '',
         os: peer?.OS ?? '',
 
         // Online is omitted rather than set false for a peer the daemon has
@@ -120,10 +116,8 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
         canBeExitNode: peer?.ExitNodeOption === true,
 
         // TailscaleIPs is absent for a peer with no addresses yet. An empty
-        // array keeps every caller from having to check before indexing, which
-        // is where upstream's "empty entries" came from.
+        // array keeps every caller from having to check before indexing.
         ips: Array.isArray(peer?.TailscaleIPs) ? peer.TailscaleIPs : [],
-        tags: Array.isArray(peer?.Tags) ? peer.Tags : [],
 
         isMullvad: isMullvad(peer),
         location: peer?.Location ?? null,
@@ -132,7 +126,6 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
         // where it becomes a decision and a reason.
         taildropTarget:
             typeof peer?.TaildropTarget === 'number' ? peer.TaildropTarget : 0,
-        noFileSharingReason: peer?.NoFileSharingReason ?? '',
     };
 
     node.icon = iconNameFor(node);
@@ -175,7 +168,7 @@ export function sortNodes(nodes) {
         (a, b) =>
             Number(b.isExitNode) - Number(a.isExitNode) ||
             Number(b.online) - Number(a.online) ||
-            collator.compare(a.name, b.name),
+            compareNames(a.name, b.name),
     );
 }
 

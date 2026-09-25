@@ -129,7 +129,6 @@ describe('normalizePeer', () => {
         expect(node).toMatchObject({
             id: 'nSOMEID1CNTRL',
             name: 'laptop',
-            hostName: 'laptop',
             os: 'linux',
             online: true,
             isExitNode: false,
