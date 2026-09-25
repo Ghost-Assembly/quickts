@@ -35,7 +35,7 @@ export const TAILDROP = Object.freeze({
 /**
  * Why a node cannot receive a file, untranslated.
  *
- * modules/panel.js applies gettext; see the note at the top of
+ * modules/taildrop-section.js applies gettext; see the note at the top of
  * modules/health.js for why that split exists.
  *
  * @param {number} status A TaildropTargetStatus.

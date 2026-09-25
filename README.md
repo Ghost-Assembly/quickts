@@ -53,8 +53,11 @@ just docs         # serve the documentation site
 ```
 
 The suite runs on plain Node. Every decision QuickTS makes lives in a pure
-module under `modules/`, and the two files that touch GNOME or libsoup are kept
-deliberately free of branching — see the
+module under `modules/`, and the files that touch GNOME or libsoup are kept
+deliberately free of branching: `modules/io.js` for the daemon, and
+`modules/panel.js` with the menu sections it builds (`exit-node-section.js`,
+`device-section.js`, `taildrop-section.js`, on top of `menu-items.js` and
+`navigable-section.js`) — see the
 [architecture notes](https://ghost-assembly.github.io/quickts/#architecture).
 
 ## Releasing
