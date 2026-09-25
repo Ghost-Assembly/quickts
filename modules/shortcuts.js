@@ -2,7 +2,8 @@
 //
 // Lifted from the sibling tiler repo, minus its conflictingActions: QuickTS
 // has one shortcut, so there is nothing of its own for it to collide with.
-// Mutter still refuses an accelerator another application holds, which
+// Nothing here or in Mutter detects an accelerator that something else also
+// binds — Mutter refuses only a keybinding NAME already registered, which
 // modules/panel.js handles by checking what addKeybinding returned.
 //
 // Imports nothing from gi://. The Gdk and Gtk values these rules need are

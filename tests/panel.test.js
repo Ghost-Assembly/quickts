@@ -1433,7 +1433,8 @@ describe('the keybinding', () => {
         expect(Main.quickSettingsToggles).toHaveLength(0);
     });
 
-    // Mutter returns NONE when the accelerator is already claimed. Recording
+    // Mutter returns NONE when a keybinding of the same name is already
+    // registered — not for an accelerator clash, which it never checks. Recording
     // a key that was never registered makes disable() remove it and the Shell
     // warns.
     it('is not recorded when Mutter refuses it', () => {

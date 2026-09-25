@@ -14,9 +14,16 @@ export const KEYS = Object.freeze({
     MAX_MENU_HEIGHT: 'max-menu-height',
 });
 
-/** Keys that hold an accelerator. */
+/**
+ * Keys that hold an accelerator.
+ *
+ * Main.wm.addKeybinding registers the key's NAME with Mutter, whose names are
+ * one table shared by the whole Shell and every extension, and a second
+ * registration of a name is refused. Hence the prefix: "open-menu" is a name
+ * any extension might choose.
+ */
 export const SHORTCUT_KEYS = Object.freeze({
-    OPEN_MENU: 'open-menu',
+    OPEN_MENU: 'quickts-open-menu',
 });
 
 /**
