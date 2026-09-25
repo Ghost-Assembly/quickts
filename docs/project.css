@@ -1,0 +1,121 @@
+/*
+ * QuickTS's additions to the shared Ghost Assembly docs template.
+ *
+ * style.css is the template and is kept byte-identical across the quick*
+ * sites; what only this site needs lives here, loaded after it. It uses the
+ * template's tokens throughout. The one exception is the hero drawing, which
+ * takes GNOME's own colors, as the template's drawing does.
+ */
+
+/* ---- The product drawing: QuickTS's tile and menu ------------------------ */
+
+/* QuickTS's indicators live among the system icons rather than in a pill of
+ * their own, so with the clock hidden on a phone the system pill is pushed to
+ * the end by itself. */
+.gtop .sys {
+    margin-inline-start: auto;
+}
+
+/* The two QuickTS indicators — the tailnet is up, and traffic is leaving
+ * through an exit node — picked out the way the template picks out its own
+ * top bar item. */
+.ts-ind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-inline-start: -6px;
+    padding: 3px 6px;
+    border-radius: 999px;
+    box-shadow:
+        0 0 0 1.5px var(--cyan),
+        0 0 18px rgb(0 168 252 / 0.55);
+}
+
+/* The tile's own icon, drawn from icons/quickts-symbolic.svg. */
+.ts-icon {
+    display: block;
+}
+
+/* On the narrowest phones two tiles side by side cut "Tailscale" short, so
+ * the neighboring tile, which is only scenery, steps aside. */
+@media (max-width: 420px) {
+    .qs-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .qs-row .tile:not(.on) {
+        display: none;
+    }
+}
+
+/* A PopupSubMenuMenuItem: the section's name and GNOME's disclosure triangle. */
+.ts-sub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    padding-inline: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+}
+
+.ts-sub.open {
+    background: rgb(255 255 255 / 0.07);
+}
+
+/* The open section's rows, on the darker ground GNOME gives a submenu. */
+.ts-subm {
+    margin: 2px 0 4px;
+    padding: 4px 0;
+    border-radius: 12px;
+    background: rgb(0 0 0 / 0.18);
+}
+
+/* A PopupImageMenuItem: the device's icon, then its name. */
+.ts-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 36px;
+    padding-inline: 24px 12px;
+    font-size: 14px;
+}
+
+/* ---- The menu, as an annotated list ------------------------------------- */
+
+.tree {
+    margin: 24px 0 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    list-style: none;
+}
+
+.tree li {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 4px 20px;
+    padding: 14px 18px;
+    border-block-end: 1px solid var(--line);
+}
+
+.tree li:last-child {
+    border-block-end: 0;
+}
+
+.tree b {
+    font-weight: 600;
+}
+
+.tree span {
+    color: var(--mist);
+}
+
+/* Phones: the name above what it does. */
+@media (max-width: 760px) {
+    .tree li {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 14px 16px;
+    }
+}

@@ -74,4 +74,13 @@ export default [
             globals: globals.node,
         },
     },
+    {
+        // The docs site's browser suite: Node, plus the callbacks it hands to
+        // page.evaluate(), which run in the page. Scoped to this file alone;
+        // extension code must never see browser globals (see the top).
+        files: ['tests/**/*.spec.js'],
+        languageOptions: {
+            globals: { ...globals.node, ...globals.browser },
+        },
+    },
 ];
