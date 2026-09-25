@@ -244,8 +244,10 @@ export function suggestExitNodeRequest() {
 export const NOTIFY = Object.freeze({
     /** First message, sent at once, carries State and BrowseToURL. */
     INITIAL_STATE: 1 << 1,
-    /** Let the daemon coalesce bursts of netmap updates before sending them. */
-    RATE_LIMIT: 1 << 8,
+    /** Announce peers added, replaced or removed, as PeersChanged and PeersRemoved. */
+    PEER_CHANGES: 1 << 12,
+    /** Narrow per-field peer patches, as PeerChangedPatch. Not subscribed to. */
+    PEER_PATCHES: 1 << 15,
 });
 
 /**
@@ -256,13 +258,18 @@ export const NOTIFY = Object.freeze({
  * one still waiting on a dead socket, and it carries BrowseToURL, which is how
  * an interactive login hands over its URL.
  *
- * RATE_LIMIT lets tailscaled do the first round of coalescing itself. It is
- * complementary to flushDelay in modules/timing.js, not a replacement: the
- * daemon throttles what it sends, and QuickTS still batches what it receives.
- * It is rejected in combination with the delta-stream bits, none of which
- * QuickTS uses.
+ * PEER_CHANGES is what makes the peer list refresh at all on Linux. Since
+ * Tailscale 1.100 only a Windows tailscaled sends NetMap after the first
+ * message, so without it a peer coming online is never announced. QuickTS
+ * reads none of what the delta carries — see modules/bus.js — only that it
+ * arrived. PEER_PATCHES is left off: without it the daemon promotes each patch
+ * into PeersChanged, and one field to watch is simpler than two.
+ *
+ * NotifyRateLimit (1 << 8) is deliberately absent. ipn.ValidateNotifyWatchOpt
+ * rejects it alongside PEER_CHANGES with a 400, which would lose the whole
+ * stream; flushDelay in modules/timing.js does the coalescing instead.
  */
-export const WATCH_MASK = NOTIFY.INITIAL_STATE | NOTIFY.RATE_LIMIT;
+export const WATCH_MASK = NOTIFY.INITIAL_STATE | NOTIFY.PEER_CHANGES;
 
 /**
  * Ask the daemon to ping a peer.

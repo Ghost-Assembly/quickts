@@ -83,7 +83,21 @@ export function dirtyFrom(notify) {
         // The netmap moved: a peer appeared, went offline, or changed name.
         // Read the full /status, but only when someone is looking — see the
         // refresh policy in modules/model.js.
-        peers: carries(notify?.NetMap),
+        //
+        // NetMap alone is not enough. Since Tailscale 1.100 a runtime NetMap
+        // is sent only on Windows (ipn/ipnlocal/bus.go,
+        // goosGetsLegacyNetmapNotify), so on Linux the netmap moving is
+        // announced by SelfChange, which accompanies every new netmap, and by
+        // the peer delta fields NOTIFY.PEER_CHANGES subscribes to. Without
+        // NOTIFY.PEER_PATCHES the daemon promotes every PeerChangedPatch into
+        // PeersChanged, so the patch field is listed only so a future mask
+        // cannot silently lose it.
+        peers:
+            carries(notify?.NetMap) ||
+            carries(notify?.SelfChange) ||
+            carries(notify?.PeersChanged) ||
+            carries(notify?.PeersRemoved) ||
+            carries(notify?.PeerChangedPatch),
 
         // Backend state, a finished login, or a URL to visit. Any of these
         // changes what the toggle says, so read the cheap /status.
@@ -92,8 +106,9 @@ export function dirtyFrom(notify) {
             carries(notify?.LoginFinished) ||
             carries(notify?.BrowseToURL),
 
-        // The daemon reported a problem. /status carries the full Health list.
-        health: carries(notify?.ErrMessage),
+        // The daemon reported a problem, or its health changed in either
+        // direction. /status carries the full Health list.
+        health: carries(notify?.Health) || carries(notify?.ErrMessage),
     };
 }
 

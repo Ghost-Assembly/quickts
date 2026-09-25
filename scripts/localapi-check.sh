@@ -18,7 +18,10 @@ command -v gjs >/dev/null || {
     exit 1
 }
 
-if ! tailscale status >/dev/null 2>&1; then
+# --json, because plain `tailscale status` exits 1 for a daemon that is
+# reachable and merely stopped — and a stopped daemon is a state this check
+# has to cover, not refuse.
+if ! tailscale status --json >/dev/null 2>&1; then
     echo "FAIL: tailscaled is not reachable; start it, or set yourself operator with" >&2
     echo "      sudo tailscale set --operator=\$USER" >&2
     exit 1

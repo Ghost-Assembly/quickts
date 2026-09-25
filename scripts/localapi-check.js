@@ -8,6 +8,7 @@
 
 import GLib from 'gi://GLib';
 
+import { dirtyFrom } from '../modules/bus.js';
 import { CancelToken, isCanceled } from '../modules/cancel.js';
 import { createIo } from '../modules/io.js';
 import {
@@ -20,6 +21,7 @@ import {
     profilesRequest,
     statusRequest,
     watchBusRequest,
+    WATCH_MASK,
 } from '../modules/localapi.js';
 import { PING_TYPE, describePing } from '../modules/ping.js';
 
@@ -33,6 +35,10 @@ const fail = message => {
 
 const check = (condition, message) => (condition ? ok(message) : fail(message));
 
+// The oldest tailscaled whose /status carries every field modules/peers.js
+// reads: TaildropTarget arrived in 1.82. README.md states the same floor.
+const MIN_VERSION = [1, 82];
+
 const has = (object, key) =>
     object !== null && typeof object === 'object' && Object.hasOwn(object, key);
 
@@ -45,6 +51,14 @@ async function checkStatus(client) {
         check(has(status, key), `/status carries ${key}`);
 
     check(Array.isArray(status.Health), '/status Health is an array');
+
+    const [major, minor] = String(status.Version ?? '')
+        .split(/[.-]/)
+        .map(Number);
+    check(
+        major > MIN_VERSION[0] || (major === MIN_VERSION[0] && minor >= MIN_VERSION[1]),
+        `tailscaled ${status.Version} is at least ${MIN_VERSION.join('.')}`,
+    );
 
     const peers = Object.values(status.Peer ?? {});
     if (peers.length === 0) {
@@ -111,6 +125,24 @@ async function checkProfiles(client) {
 }
 
 async function checkFileTargets(client) {
+    const { BackendState } = await client.request(statusRequest({ peers: false }));
+
+    // modules/model.js does not ask unless the tailnet is up, and does not
+    // treat a refusal as the daemon being unreachable. This is why: the
+    // daemon answers 500 whenever it is not Running.
+    if (BackendState !== 'Running') {
+        try {
+            await client.request(fileTargetsRequest());
+            ok(`/file-targets answered while ${BackendState}`);
+        } catch (error) {
+            check(
+                error?.status === 500,
+                `/file-targets is refused while ${BackendState} (${error})`,
+            );
+        }
+        return;
+    }
+
     const targets = await client.request(fileTargetsRequest());
     check(Array.isArray(targets), '/file-targets returns an array');
     check(
@@ -200,17 +232,25 @@ async function checkStreamCancels(io, token) {
     // which on a quiet tailnet is indefinitely.
     const stream = io.client.stream(watchBusRequest());
 
+    // Opening at all is the first check: a mask the daemon will not accept
+    // (NotifyRateLimit with PEER_CHANGES, say) is refused with a 400 and the
+    // extension would never hear from the bus again.
     const first = await stream.next();
-    check(!first.done, 'the IPN bus answers immediately with the initial state');
+    check(
+        !first.done,
+        `the IPN bus accepts mask ${WATCH_MASK} and answers with the initial state`,
+    );
 
     if (!first.done) {
         const notify = JSON.parse(first.value);
         check(has(notify, 'State'), 'the initial notification carries State');
-        // modules/bus.js keys off which fields are present, so the shape of
-        // this object is the contract, not any value inside it.
+        // modules/bus.js keys off which fields carry a value, so this is the
+        // contract: the first message must read as a state change and nothing
+        // more, or every reconnect would trigger reads it does not need.
+        const dirty = dirtyFrom(notify);
         check(
-            ['Prefs', 'NetMap', 'BrowseToURL'].every(key => has(notify, key)),
-            'the notification carries the fields modules/bus.js keys off',
+            dirty.state && !dirty.peers && !dirty.prefs,
+            'modules/bus.js reads the initial notification as a state change only',
         );
     }
 

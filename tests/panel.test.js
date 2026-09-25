@@ -135,7 +135,9 @@ describe('the tile', () => {
 
     it('reports an unreachable daemon in its subtitle', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });
@@ -306,7 +308,9 @@ describe('problems and warnings', () => {
     // to do, and burying them is the opposite of what a disclosure is for.
     it('keeps actionable problems out of the disclosure', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });
@@ -351,7 +355,9 @@ describe('problems and warnings', () => {
     // journal and draws an empty menu.
     it('copies the operator command from an actionable problem', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });

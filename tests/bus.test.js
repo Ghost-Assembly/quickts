@@ -89,6 +89,14 @@ describe('dirtyFrom', () => {
     it.each([
         ['Prefs', { Prefs: { WantRunning: true } }, { ...NOTHING_DIRTY, prefs: true }],
         ['NetMap', { NetMap: { Peers: [] } }, { ...NOTHING_DIRTY, peers: true }],
+        ['PeersChanged', { PeersChanged: [{}] }, { ...NOTHING_DIRTY, peers: true }],
+        ['PeersRemoved', { PeersRemoved: [1] }, { ...NOTHING_DIRTY, peers: true }],
+        [
+            'PeerChangedPatch',
+            { PeerChangedPatch: [{ NodeID: 1, Online: false }] },
+            { ...NOTHING_DIRTY, peers: true },
+        ],
+        ['SelfChange', { SelfChange: {} }, { ...NOTHING_DIRTY, peers: true }],
         ['State', { State: 2 }, { ...NOTHING_DIRTY, state: true }],
         ['LoginFinished', { LoginFinished: {} }, { ...NOTHING_DIRTY, state: true }],
         [
@@ -97,6 +105,7 @@ describe('dirtyFrom', () => {
             { ...NOTHING_DIRTY, state: true },
         ],
         ['ErrMessage', { ErrMessage: 'broken' }, { ...NOTHING_DIRTY, health: true }],
+        ['Health', { Health: { Warnings: {} } }, { ...NOTHING_DIRTY, health: true }],
     ])('%s marks exactly what it should', (_field, notify, expected) => {
         expect(dirtyFrom(notify)).toEqual(expected);
     });
