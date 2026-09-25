@@ -11,7 +11,9 @@ testing, packaging and releasing.
 ## Requires
 
 - GNOME Shell 50
-- Tailscale, with your user set as the operator:
+- Tailscale 1.82 or later — the first release whose `/status` says which
+  peers can receive a file. Developed and checked against 1.102.
+- Your user set as the Tailscale operator:
 
 ```bash
 sudo tailscale set --operator=$USER
@@ -43,7 +45,9 @@ just              # list every recipe
 just test         # unit suite
 just lint         # eslint, prettier, gschema, shellcheck
 just ci           # what CI runs: lint, test, security, build
-just test-live    # headless gnome-shell and bundle checks; needs a real Shell
+just test-live    # headless Shell, bundle and LocalAPI checks; needs a real
+                  # gnome-shell and a running tailscaled (it may be stopped,
+                  # but the daemon must answer)
 just docs         # serve the documentation site
 ```
 
