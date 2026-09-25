@@ -48,14 +48,20 @@ export function displayName(peer, magicDNSSuffix = '') {
     return fqdn.split('.')[0];
 }
 
+/** Where Mullvad's nodes live; the suffix cmd/tailscale/cli/status.go checks. */
+const MULLVAD_DOMAIN = '.mullvad.ts.net';
+
 /**
  * Whether a peer is one of Mullvad's exit nodes.
  *
- * Two signals, because neither is guaranteed. The tag is what Tailscale
- * documents, but a peer's Tags field is omitted entirely when it has none, and
- * Location is omitempty too. Either one alone is enough to be sure; requiring
- * both would drop nodes, and this could not be verified against a tailnet with
- * Mullvad enabled, so it is written to degrade rather than to guess.
+ * By name first, the way Tailscale's own CLI decides: status.go treats an
+ * exit node whose DNSName ends in mullvad.ts.net as Mullvad's. The tag is
+ * accepted too, for a /status that carries it.
+ *
+ * Not by Location. tailcfg.Location is "only set if explicitly declared by a
+ * node", and any node may declare one — so a location proves only that
+ * someone filled it in, and taking it as Mullvad pulled ordinary exit nodes
+ * out of the list and into a country group.
  *
  * @param {object} peer Raw peer from /status.
  * @returns {boolean} True if the peer is a Mullvad exit node.
@@ -63,7 +69,8 @@ export function displayName(peer, magicDNSSuffix = '') {
 export function isMullvad(peer) {
     if (Array.isArray(peer?.Tags) && peer.Tags.includes(MULLVAD_TAG)) return true;
 
-    return Boolean(peer?.Location?.CountryCode);
+    const fqdn = String(peer?.DNSName ?? '').replace(/\.$/, '');
+    return fqdn.endsWith(MULLVAD_DOMAIN);
 }
 
 /**
