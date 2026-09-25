@@ -43,8 +43,9 @@ just enable
 ```bash
 just              # list every recipe
 just test         # unit suite
+just test-docs    # the docs site, in Chromium and Firefox
 just lint         # eslint, prettier, gschema, shellcheck
-just ci           # what CI runs: lint, test, security, build
+just ci           # what CI runs: lint, tests, docs, security, build
 just test-live    # headless Shell, bundle and LocalAPI checks; needs a real
                   # gnome-shell and a running tailscaled (it may be stopped,
                   # but the daemon must answer)
