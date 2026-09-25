@@ -32,7 +32,6 @@ import {
     summaryOf,
 } from './health.js';
 import { maxHeightStyle, menuMaxHeight } from './layout.js';
-import { cityOf, groupByCountry, partitionMullvad } from './mullvad.js';
 import { KEYS, SHORTCUT_KEYS } from './settings.js';
 import { ROUTE } from './ping.js';
 import { advertisesExitNode } from './routes.js';
@@ -54,6 +53,7 @@ import {
     warningRow,
 } from './menu-items.js';
 import { NavigableSection } from './navigable-section.js';
+import { ExitNodeSection } from './exit-node-section.js';
 
 /** The tile's own icon, next to the clock. */
 const QuickTSIndicator = GObject.registerClass(
@@ -123,19 +123,15 @@ const QuickTSToggle = GObject.registerClass(
             this._devicesGeneration = 0;
             this._taildropGeneration = 0;
             this._inboxGeneration = 0;
-            this._suggestionGeneration = 0;
 
             // A one-shot re-measure of the menu height; see
             // _remeasureOnceLaidOut().
             this._allocationId = 0;
             this._laterId = 0;
 
-            // The daemon's exit node recommendation, once asked for.
-            this._suggestion = null;
-
-            // The snapshot _exitChoices last partitioned, and its result.
-            this._exitChoicesFor = null;
-            this._exitChoicesValue = null;
+            // What each section module needs from the toggle, passed
+            // explicitly rather than reached for.
+            this._deps = { model, settings, i18n, gicon, chooseFiles };
 
             this.menu.setHeader(gicon, _('Tailscale'), '');
 
@@ -169,23 +165,8 @@ const QuickTSToggle = GObject.registerClass(
             this._warnings.visible = false;
             this.menu.addMenuItem(this._warnings);
 
-            this._exitNode = new PopupMenu.PopupSubMenuMenuItem(_('Exit node'), true);
-            this.menu.addMenuItem(this._exitNode);
-            this._exitSection = new NavigableSection(this._exitNode, {
-                title: state => exitNodeLabel(state, this._i18n),
-                back: _('All exit nodes'),
-                resolve: (code, state) =>
-                    this._exitChoices(state).groups.find(
-                        group => group.country.code === code,
-                    ) ?? null,
-                detailTitle: group => group.country.name,
-                renderList: (menu, state, open) =>
-                    this._renderExitNodes(menu, state, open),
-                renderDetail: (menu, group) => {
-                    for (const node of group.nodes)
-                        menu.addMenuItem(this._exitNodeItem(node, cityOf(node)));
-                },
-            });
+            this._exitNodeSection = new ExitNodeSection(this.menu, this._deps);
+            this._exitNode = this._exitNodeSection.item;
 
             this._devices = new PopupMenu.PopupSubMenuMenuItem(_('Devices'), true);
             this.menu.addMenuItem(this._devices);
@@ -310,7 +291,8 @@ const QuickTSToggle = GObject.registerClass(
 
             if (moved('health')) this._syncWarnings(state);
 
-            if (moved('nodes') || moved('exitNodeId')) this._syncExitNode(state);
+            if (moved('nodes') || moved('exitNodeId'))
+                this._exitNodeSection.sync(state);
             if (moved('nodes') || moved('magicDNSSuffix')) this._syncDevices(state);
 
             this._syncOptions(state);
@@ -411,115 +393,6 @@ const QuickTSToggle = GObject.registerClass(
                     this._warnings.menu,
                     _n('%d more', '%d more', hidden).replace('%d', String(hidden)),
                 );
-        }
-
-        /** @param {object} state A snapshot. */
-        _syncExitNode(state) {
-            this._exitSection.render(state);
-        }
-
-        /**
-         * The exit node list: None, the tailnet's own candidates, then one row
-         * per Mullvad country.
-         *
-         * @param {object} menu The submenu to fill.
-         * @param {object} state A snapshot.
-         * @param {Function} open Drill into a country.
-         */
-        _renderExitNodes(menu, state, open) {
-            const { _ } = this._i18n;
-
-            const { regular, groups } = this._exitChoices(state);
-
-            addRow(
-                menu,
-                _('None'),
-                state.exitNodeId ? '' : 'object-select-symbolic',
-                () => void this._model.setExitNode(''),
-                this,
-            );
-
-            // The daemon's own recommendation, offered only while nothing is
-            // chosen — once one is in use, a suggestion is just noise.
-            if (this._suggestion && !state.exitNodeId) {
-                addRow(
-                    menu,
-                    _('Suggested: %s').replace('%s', this._suggestion.name),
-                    'starred-symbolic',
-                    () => void this._model.setExitNode(this._suggestion.id),
-                    this,
-                );
-            }
-
-            for (const node of regular)
-                menu.addMenuItem(this._exitNodeItem(node, node.name));
-
-            if (!this._settings.get_boolean(KEYS.SHOW_MULLVAD)) return;
-
-            for (const group of groups) {
-                const label = group.country.flag
-                    ? `${group.country.flag}  ${group.country.name}`
-                    : group.country.name;
-
-                menu.addMenuItem(
-                    new ActionMenuItem(
-                        label,
-                        group.nodes.some(node => node.isExitNode)
-                            ? 'object-select-symbolic'
-                            : '',
-                        () => open(group.country.code),
-                    ),
-                );
-            }
-        }
-
-        /**
-         * The exit node list, split into the tailnet's own candidates and
-         * Mullvad's grouped by country.
-         *
-         * Memoized on the snapshot itself. A snapshot is frozen and replaced
-         * wholesale on every change, so identity is a sound cache key — and
-         * one render asks for this up to three times (the list, the country
-         * rows, and `resolve` when a country is drilled into). On a tailnet
-         * with Mullvad that is several thousand nodes filtered, partitioned
-         * and grouped once instead of three times.
-         *
-         * @param {object} state A snapshot.
-         * @returns {{regular: object[], groups: Array<object>}} The choices.
-         */
-        _exitChoices(state) {
-            if (this._exitChoicesFor !== state) {
-                const { regular, mullvad } = partitionMullvad(
-                    state.nodes.filter(node => node.canBeExitNode),
-                );
-
-                this._exitChoicesFor = state;
-                this._exitChoicesValue = { regular, groups: groupByCountry(mullvad) };
-            }
-
-            return this._exitChoicesValue;
-        }
-
-        /**
-         * @param {object} node A normalized node.
-         * @param {string} label What to call it.
-         * @returns {object} A menu item.
-         */
-        _exitNodeItem(node, label) {
-            const item = new PopupMenu.PopupImageMenuItem(
-                label,
-                node.isExitNode ? 'object-select-symbolic' : node.icon,
-            );
-
-            // Selecting the node in use clears it, so the same row both sets
-            // and unsets without needing a separate "stop" control.
-            item.connectObject(
-                'activate',
-                () => void this._model.setExitNode(node.isExitNode ? '' : node.id),
-                this,
-            );
-
-            return item;
         }
 
         /** @param {object} state A snapshot. */
@@ -771,31 +644,6 @@ const QuickTSToggle = GObject.registerClass(
         }
 
         /**
-         * Ask the daemon which exit node it would pick.
-         *
-         * Only meaningful while none is chosen, so it is skipped when one is.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncSuggestion() {
-            const generation = ++this._suggestionGeneration;
-
-            if (this._model.state.exitNodeId) {
-                this._suggestion = null;
-                return;
-            }
-
-            const suggestion = await this._model.suggestedExitNode();
-            if (generation !== this._suggestionGeneration) return;
-
-            // Replaced even when empty. Keeping the previous answer when the
-            // daemon has withdrawn it offers a node it no longer recommends.
-            const had = this._suggestion !== null;
-            this._suggestion = suggestion.id ? suggestion : null;
-            if (had || this._suggestion) this._syncExitNode(this._model.state);
-        }
-
-        /**
          * Choose files and send them.
          *
          * @param {object} node The node to send to.
@@ -929,7 +777,7 @@ const QuickTSToggle = GObject.registerClass(
             if (!open) {
                 // Reopening should land on the lists, not wherever the last
                 // visit wandered to.
-                const wandered = [this._deviceSection, this._exitSection]
+                const wandered = [this._deviceSection, this._exitNodeSection]
                     .map(section => section.reset())
                     .some(Boolean);
                 if (wandered) this.sync(this._model.state);
@@ -940,7 +788,7 @@ const QuickTSToggle = GObject.registerClass(
             this._remeasureOnceLaidOut();
             void this._syncTaildrop();
             void this._syncInbox();
-            void this._syncSuggestion();
+            void this._exitNodeSection.menuOpened(this._model.state);
         }
 
         /**
@@ -1018,7 +866,7 @@ const QuickTSToggle = GObject.registerClass(
             this._devicesGeneration += 1;
             this._taildropGeneration += 1;
             this._inboxGeneration += 1;
-            this._suggestionGeneration += 1;
+            this._exitNodeSection.destroy();
 
             this._cancelRemeasure();
 
@@ -1232,20 +1080,4 @@ function formatPing(result, { _ }) {
     if (result.route === ROUTE.RELAY) return _('%s ms, relayed').replace('%s', latency);
 
     return _('%s ms').replace('%s', latency);
-}
-
-/**
- * What to call the exit node section.
- *
- * An exit node chosen automatically has an id of the form "auto:any", which
- * names no peer, so there is a node in use and no name for it.
- *
- * @param {object} state A snapshot.
- * @param {{_: Function}} i18n gettext.
- * @returns {string} A label.
- */
-function exitNodeLabel(state, { _ }) {
-    if (state.exitNodeName) return _('Exit node: %s').replace('%s', state.exitNodeName);
-
-    return state.exitNodeId ? _('Exit node: automatic') : _('Exit node');
 }
