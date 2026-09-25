@@ -6,12 +6,9 @@
 // spelling meets ours — see modules/bus.js for what happens to a codebase that
 // has two.
 //
-// This file imports nothing.
+// This file imports only other pure modules.
 
-// One collator, built once. Its compare() orders exactly as localeCompare()
-// does, but a bare localeCompare() call resolves a collator every time — and
-// this comparator runs over the whole tailnet.
-const collator = new Intl.Collator();
+import { compareNames } from './collate.js';
 
 /** Tag Tailscale puts on a Mullvad exit node. */
 export const MULLVAD_TAG = 'tag:mullvad-exit-node';
@@ -48,14 +45,20 @@ export function displayName(peer, magicDNSSuffix = '') {
     return fqdn.split('.')[0];
 }
 
+/** Where Mullvad's nodes live; the suffix cmd/tailscale/cli/status.go checks. */
+const MULLVAD_DOMAIN = '.mullvad.ts.net';
+
 /**
  * Whether a peer is one of Mullvad's exit nodes.
  *
- * Two signals, because neither is guaranteed. The tag is what Tailscale
- * documents, but a peer's Tags field is omitted entirely when it has none, and
- * Location is omitempty too. Either one alone is enough to be sure; requiring
- * both would drop nodes, and this could not be verified against a tailnet with
- * Mullvad enabled, so it is written to degrade rather than to guess.
+ * By name first, the way Tailscale's own CLI decides: status.go treats an
+ * exit node whose DNSName ends in mullvad.ts.net as Mullvad's. The tag is
+ * accepted too, for a /status that carries it.
+ *
+ * Not by Location. tailcfg.Location is "only set if explicitly declared by a
+ * node", and any node may declare one — so a location proves only that
+ * someone filled it in, and taking it as Mullvad pulled ordinary exit nodes
+ * out of the list and into a country group.
  *
  * @param {object} peer Raw peer from /status.
  * @returns {boolean} True if the peer is a Mullvad exit node.
@@ -63,7 +66,8 @@ export function displayName(peer, magicDNSSuffix = '') {
 export function isMullvad(peer) {
     if (Array.isArray(peer?.Tags) && peer.Tags.includes(MULLVAD_TAG)) return true;
 
-    return Boolean(peer?.Location?.CountryCode);
+    const fqdn = String(peer?.DNSName ?? '').replace(/\.$/, '');
+    return fqdn.endsWith(MULLVAD_DOMAIN);
 }
 
 /**
@@ -102,7 +106,6 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
     const node = {
         id,
         name: displayName(peer, magicDNSSuffix),
-        hostName: peer?.HostName ?? '',
         os: peer?.OS ?? '',
 
         // Online is omitted rather than set false for a peer the daemon has
@@ -113,10 +116,8 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
         canBeExitNode: peer?.ExitNodeOption === true,
 
         // TailscaleIPs is absent for a peer with no addresses yet. An empty
-        // array keeps every caller from having to check before indexing, which
-        // is where upstream's "empty entries" came from.
+        // array keeps every caller from having to check before indexing.
         ips: Array.isArray(peer?.TailscaleIPs) ? peer.TailscaleIPs : [],
-        tags: Array.isArray(peer?.Tags) ? peer.Tags : [],
 
         isMullvad: isMullvad(peer),
         location: peer?.Location ?? null,
@@ -125,7 +126,6 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
         // where it becomes a decision and a reason.
         taildropTarget:
             typeof peer?.TaildropTarget === 'number' ? peer.TaildropTarget : 0,
-        noFileSharingReason: peer?.NoFileSharingReason ?? '',
     };
 
     node.icon = iconNameFor(node);
@@ -168,7 +168,7 @@ export function sortNodes(nodes) {
         (a, b) =>
             Number(b.isExitNode) - Number(a.isExitNode) ||
             Number(b.online) - Number(a.online) ||
-            collator.compare(a.name, b.name),
+            compareNames(a.name, b.name),
     );
 }
 

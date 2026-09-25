@@ -5,6 +5,7 @@ import {
     canReceive,
     fileNameOf,
     hasEligibleTarget,
+    isListedTarget,
     reasonFor,
     sendTargets,
 } from '../modules/taildrop.js';
@@ -174,5 +175,20 @@ describe('fileNameOf', () => {
         ['undefined', undefined],
     ])('falls back to a usable name for %s', (_reason, uri) => {
         expect(fileNameOf(uri)).toBe('file');
+    });
+});
+
+describe('isListedTarget', () => {
+    it('finds a node the daemon lists', () => {
+        expect(isListedTarget([target('nA'), target('nB')], 'nB')).toBe(true);
+    });
+
+    it.each([
+        ['an unlisted node', [target('nA')], 'nB'],
+        ['an empty list', [], 'nA'],
+        ['a null answer', null, 'nA'],
+        ['an empty id against a malformed entry', [{ Node: {} }], ''],
+    ])('refuses %s', (_reason, targets, id) => {
+        expect(isListedTarget(targets, id)).toBe(false);
     });
 });

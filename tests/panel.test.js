@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { REASON } from '../modules/errors.js';
+import { isOn } from '../modules/health.js';
 import { Panel } from '../modules/panel.js';
 import { KEYS, SHORTCUT_KEYS } from '../modules/settings.js';
 import { BACKEND } from '../modules/state.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import { clipboard, resetSt, themeContext } from './stubs/gi-st.js';
-import { launchedUris, resetGio } from './stubs/gi-gio.js';
+import {
+    launchContexts,
+    launchFailure,
+    launchedUris,
+    resetGio,
+} from './stubs/gi-gio.js';
 import * as Main from './stubs/shell-main.js';
 import { descendants, liveHandlers, resetActors } from './support/actors.js';
 import { createClock, createDaemon, createScheduler } from './support/daemon.js';
@@ -75,16 +81,51 @@ const settle = async (turns = 12) => {
         await new Promise(resolve => setTimeout(resolve, 0));
 };
 
+/**
+ * Mutter's laters, as far as modules/panel.js uses them. Nothing runs on its
+ * own; a test fires them with runLaters(), as the next frame would.
+ */
+const laters = new Map();
+let nextLater = 1;
+const runLaters = () => {
+    for (const [id, callback] of [...laters]) {
+        laters.delete(id);
+        callback();
+    }
+};
+
 beforeEach(() => {
     Main.reset();
     resetActors();
     resetSt();
     resetGio();
+    laters.clear();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // The Shell's `global`, which Node spells globalThis. Only the two calls
+    // modules/panel.js makes.
+    globalThis.create_app_launch_context = (timestamp, workspace) => ({
+        timestamp,
+        workspace,
+    });
+    globalThis.compositor = {
+        get_laters: () => ({
+            add(_type, callback) {
+                const id = nextLater++;
+                laters.set(id, callback);
+                return id;
+            },
+            remove(id) {
+                laters.delete(id);
+            },
+        }),
+    };
 });
 
 afterEach(() => {
     vi.restoreAllMocks();
+    delete globalThis.create_app_launch_context;
+    delete globalThis.compositor;
 });
 
 describe('placement', () => {
@@ -135,7 +176,9 @@ describe('the tile', () => {
 
     it('reports an unreachable daemon in its subtitle', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });
@@ -156,6 +199,63 @@ describe('the tile', () => {
         await settle();
 
         expect(daemon.patches.at(-1)).toMatchObject({ WantRunning: false });
+    });
+
+    // St flips `checked` on click in toggle mode, before the daemon has said
+    // anything. A PATCH that then fails with the error already on screen
+    // changes no field, so nothing re-syncs and the tile shows a state the
+    // daemon does not have.
+    it('does not flip on a click the daemon refuses', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        toggleOf().click();
+        await settle();
+        const afterFirst = toggleOf().checked;
+        toggleOf().click();
+        await settle();
+
+        // The second refusal changes nothing in the state, so only the click
+        // itself could have moved the tile — and it must not have.
+        expect(model.state.running).toBe(true);
+        expect(toggleOf().checked).toBe(afterFirst);
+        expect(toggleOf().checked).toBe(isOn(model.state));
+    });
+
+    // Waiting on the backend is not the same as off. A click has to be able
+    // to stop a tailnet that is still coming up.
+    it.each([BACKEND.STARTING, BACKEND.NEEDS_MACHINE_AUTH])(
+        'turns off when clicked while %s',
+        async backendState => {
+            const { panel, model, daemon } = setup();
+            daemon.responses.status.BackendState = backendState;
+            panel.enable();
+            await model.start();
+            await settle();
+
+            expect(toggleOf().checked).toBe(true);
+
+            toggleOf().click();
+            await settle();
+
+            expect(daemon.patches.at(-1)).toMatchObject({ WantRunning: false });
+        },
+    );
+
+    it('says it is waiting for approval rather than off', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.status.BackendState = BACKEND.NEEDS_MACHINE_AUTH;
+        panel.enable();
+        await model.start();
+        await settle();
+
+        expect(toggleOf().subtitle).toBe('Waiting for approval');
     });
 
     // Flipping WantRunning against a backend waiting for a login does nothing
@@ -306,7 +406,9 @@ describe('problems and warnings', () => {
     // to do, and burying them is the opposite of what a disclosure is for.
     it('keeps actionable problems out of the disclosure', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });
@@ -351,7 +453,9 @@ describe('problems and warnings', () => {
     // journal and draws an empty menu.
     it('copies the operator command from an actionable problem', async () => {
         const { panel, model, daemon } = setup();
-        daemon.failures.set('/localapi/v0/prefs', {
+        // Every request, not just one: a read that succeeded after it would
+        // rightly clear the error.
+        daemon.failures.set('/localapi/v0/', {
             name: 'TransportError',
             reason: REASON.PERMISSION_DENIED,
         });
@@ -1128,6 +1232,26 @@ describe('the suggested exit node', () => {
         expect(daemon.pathsMatching('suggest-exit-node')).toEqual([]);
     });
 
+    it('forgets a suggestion the daemon has withdrawn', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+        toggleOf().menu.close();
+
+        daemon.responses.suggestion = { ID: '', Name: '' };
+        toggleOf().menu.open();
+        await settle();
+
+        expect(
+            labelsOf(toggleOf()._exitNode.menu.items).some(text =>
+                text.startsWith('Suggested'),
+            ),
+        ).toBe(false);
+    });
+
     it('says nothing when the daemon has no opinion', async () => {
         const { panel, model, daemon } = setup();
         daemon.responses.suggestion = { ID: '', Name: '' };
@@ -1272,6 +1396,29 @@ describe('the keybinding', () => {
         expect(toggleOf().menu.isOpen).toBe(true);
     });
 
+    // Opening quick settings and reading where the tile's menu sits in the
+    // same breath reads a position the Shell has not laid out yet. The height
+    // is measured again once the menu has been allocated.
+    it('measures the height again once the menu has been laid out', async () => {
+        const settings = createSettings();
+        const { panel, model } = setup({ settings });
+        panel.enable();
+        await model.start();
+        await settle();
+
+        Main.press(SHORTCUT_KEYS.OPEN_MENU);
+        const before = toggleOf().menu.actor.get_theme_node().get_max_height();
+
+        // Laid out lower down than it was when first read.
+        toggleOf().menu.actor.transformedTop = 600;
+        toggleOf().menu.actor.emit('notify::allocation');
+        runLaters();
+
+        expect(toggleOf().menu.actor.get_theme_node().get_max_height()).toBeLessThan(
+            before,
+        );
+    });
+
     // The same guard js/ui/panel.js applies: the tile is not there to open
     // during the lock screen or the greeter.
     it('does nothing while the panel is not interactive', async () => {
@@ -1286,7 +1433,8 @@ describe('the keybinding', () => {
         expect(Main.quickSettingsToggles).toHaveLength(0);
     });
 
-    // Mutter returns NONE when the accelerator is already claimed. Recording
+    // Mutter returns NONE when a keybinding of the same name is already
+    // registered — not for an accelerator clash, which it never checks. Recording
     // a key that was never registered makes disable() remove it and the Shell
     // warns.
     it('is not recorded when Mutter refuses it', () => {
@@ -1357,6 +1505,107 @@ describe('async handlers outliving their rows', () => {
 
         await expect(settle()).resolves.toBeUndefined();
         expect(taildrop._wasDestroyed).toBe(true);
+    });
+});
+
+describe('one section rebuilding under another', () => {
+    /**
+     * Hold every request whose path starts with `prefix` until released.
+     *
+     * @returns {() => void} Releases them.
+     */
+    const hold = (daemon, prefix) => {
+        let release;
+        const held = new Promise(resolve => {
+            release = resolve;
+        });
+        const realRequest = daemon.client.request;
+        daemon.client.request = async descriptor => {
+            if (descriptor.path.startsWith(prefix)) {
+                const answer = await realRequest(descriptor);
+                await held;
+                return answer;
+            }
+            return realRequest(descriptor);
+        };
+        return () => release();
+    };
+
+    const rebuildDevices = async (daemon, model) => {
+        daemon.responses.status.Peer = rawPeerMap(
+            rawPeer({ TaildropTarget: 1 }),
+            rawPeer({ ID: 'nNEW', DNSName: `newcomer.${SUFFIX}.` }),
+        );
+        await model.refresh({ peers: true });
+        await settle();
+    };
+
+    // One counter shared by every section meant a netmap blink threw away a
+    // Taildrop listing that had nothing to do with it.
+    it('keeps a Taildrop listing when the devices rebuild', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.status.Peer = rawPeerMap(rawPeer({ TaildropTarget: 1 }));
+        daemon.responses.fileTargets = [{ Node: { StableID: 'nSOMEID1CNTRL' } }];
+        panel.enable();
+        await model.start();
+        await settle();
+
+        const release = hold(daemon, '/localapi/v0/file-targets');
+        toggleOf().menu.open();
+        await settle();
+        await rebuildDevices(daemon, model);
+        release();
+        await settle();
+
+        expect(toggleOf()._taildrop.visible).toBe(true);
+    });
+
+    it('keeps the suggestion when the devices rebuild', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+
+        const release = hold(daemon, '/localapi/v0/suggest-exit-node');
+        toggleOf().menu.open();
+        await settle();
+        await rebuildDevices(daemon, model);
+        release();
+        await settle();
+
+        expect(labelsOf(toggleOf()._exitNode.menu.items)).toContain(
+            'Suggested: gateway',
+        );
+    });
+
+    // The save finished; a row left saying "Saving…" forever says otherwise.
+    it('finishes a save when the devices rebuild during it', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.files = [{ Name: 'report.pdf', Size: 2048 }];
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        let release;
+        const held = new Promise(resolve => {
+            release = resolve;
+        });
+        const realSave = daemon.client.saveFile;
+        daemon.client.saveFile = async (...args) => {
+            await held;
+            return realSave(...args);
+        };
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+        await rebuildDevices(daemon, model);
+        release();
+        await settle();
+
+        expect(row.text).toContain('Saved to');
     });
 });
 
@@ -1585,6 +1834,7 @@ describe('the rest of the subtitle vocabulary', () => {
 describe('sending from a device', () => {
     it('sends the files chosen for that device', async () => {
         const { panel, model, daemon, chosen } = setup();
+        daemon.responses.fileTargets = [{ Node: { StableID: 'nSOMEID1CNTRL' } }];
         chosen.uris = ['file:///notes.txt'];
         const putFile = vi.fn().mockResolvedValue(undefined);
         daemon.client.putFile = putFile;
@@ -1598,6 +1848,29 @@ describe('sending from a device', () => {
         await settle();
 
         expect(putFile.mock.calls[0][0].path).toContain('/file-put/nSOMEID1CNTRL/');
+    });
+
+    // A peer's own TaildropTarget can say available while the daemon, which
+    // decides, does not list it. Nothing is sent to a peer the daemon has not
+    // named as a target, whichever row the send started from.
+    it('sends nothing to a device the daemon does not list', async () => {
+        const { panel, model, daemon, chosen } = setup();
+        daemon.responses.fileTargets = [];
+        chosen.uris = ['file:///notes.txt'];
+        const putFile = vi.fn().mockResolvedValue(undefined);
+        daemon.client.putFile = putFile;
+        panel.enable();
+        await model.start();
+        await settle();
+
+        deviceActionRows()
+            .find(item => item.text === 'Send files…')
+            .activate();
+        await settle();
+
+        expect(chosen.calls).toEqual([]);
+        expect(putFile).not.toHaveBeenCalled();
+        expect(Main.notifications.at(-1).message).toBe('Cannot send to laptop');
     });
 });
 
@@ -1725,6 +1998,33 @@ describe('teardown', () => {
         expect(indicator._wasDestroyed).toBe(true);
     });
 
+    // The Shell parents the toggle's menu into the quick settings overlay and
+    // never destroys it, so the extension must, or every lock leaks one —
+    // along with the toggle, model and transport its handlers still reach.
+    it('destroys the tile menu the Shell leaves behind', () => {
+        const { panel } = setup();
+        panel.enable();
+        const menu = toggleOf().menu;
+
+        panel.disable();
+
+        expect(menu._wasDestroyed).toBe(true);
+    });
+
+    it('leaves no layout handler or later behind', async () => {
+        const { panel, model } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+
+        Main.press(SHORTCUT_KEYS.OPEN_MENU);
+        toggleOf().menu.actor.emit('notify::allocation');
+        panel.disable();
+
+        expect(laters.size).toBe(0);
+        expect(liveHandlers.size).toBe(0);
+    });
+
     // The shape of the bug headless-check.sh exists to catch: a second enable
     // must be as clean as the first.
     it('survives enable, disable and enable again', async () => {
@@ -1835,6 +2135,51 @@ describe('login', () => {
         await settle();
 
         expect(launchedUris).toEqual([]);
+    });
+
+    // As js/ui/messageList.js launches a link: a launch context, so the
+    // browser that opens gets startup notification and the right workspace.
+    it('passes a launch context', async () => {
+        const { panel, model, daemon } = setup();
+        loggedOut(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+
+        rowsNamed(toggleOf(), 'Log in…').at(0).activate();
+        await settle();
+
+        expect(launchContexts).toEqual([{ timestamp: 0, workspace: -1 }]);
+    });
+
+    // GIO throws when nothing handles https. That must not abort the sync it
+    // happens inside, which would leave the rest of the menu stale.
+    it('finishes the sync when no browser can be launched', async () => {
+        const { panel, model, daemon } = setup();
+        loggedOut(daemon);
+        daemon.responses.status.AuthURL = '';
+        panel.enable();
+        await model.start();
+        await settle();
+
+        // The URL arrives with the read that follows the login, inside the
+        // sync that also has the new warning to draw.
+        launchFailure.next = new Error(
+            'No application is registered as handling this file',
+        );
+        const realRequest = daemon.client.request;
+        daemon.client.request = async descriptor => {
+            if (descriptor.path.startsWith('/localapi/v0/login-interactive')) {
+                daemon.responses.status.AuthURL = 'https://login.tailscale.com/a/abc';
+                daemon.responses.status.Health = ['a warning'];
+            }
+            return realRequest(descriptor);
+        };
+
+        rowsNamed(toggleOf(), 'Log in…').at(0).activate();
+        await settle();
+
+        expect(toggleOf()._warnings.visible).toBe(true);
     });
 
     it('opens it only once', async () => {
@@ -1954,6 +2299,48 @@ describe('taildrop', () => {
         expect(Main.osdMessages).toHaveLength(0);
     });
 
+    // A count is not "%d file" with an s bolted on.
+    it('pluralizes what it sent', async () => {
+        const { panel, model, daemon, chosen } = setup();
+        withTarget(daemon);
+        chosen.uris = ['file:///a/one.txt', 'file:///a/two.txt'];
+        daemon.client.putFile = vi.fn().mockResolvedValue(undefined);
+
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        toggleOf()._taildrop.menu.items.at(0).activate();
+        await settle();
+
+        expect(Main.osdMessages.at(-1).label).toBe('Sent 2 files to laptop');
+    });
+
+    // Node names and file names identify people. Main.notifyError copies both
+    // to the journal; SECURITY.md promises neither goes there.
+    it('keeps the names it could not send out of the journal', async () => {
+        const { panel, model, daemon, chosen } = setup();
+        withTarget(daemon);
+        chosen.uris = ['file:///a/secret-plans.txt'];
+        daemon.client.putFile = vi.fn().mockRejectedValue(new Error('refused'));
+
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        toggleOf()._taildrop.menu.items.at(0).activate();
+        await settle();
+
+        const logged = console.warn.mock.calls.flat().join('\n');
+        expect(logged).not.toContain('secret-plans');
+        expect(logged).not.toContain('laptop');
+        expect(Main.notifications.at(-1).details).toContain('secret-plans.txt');
+    });
+
     it('reports the files it could not send', async () => {
         const { panel, model, daemon, chosen } = setup();
         withTarget(daemon);
@@ -1972,7 +2359,7 @@ describe('taildrop', () => {
         toggleOf()._taildrop.menu.items.at(0).activate();
         await settle();
 
-        expect(Main.notifications.at(-1).kind).toBe('error');
+        expect(Main.notifications.at(-1).message).toBe('Could not send to laptop');
         expect(Main.notifications.at(-1).details).toContain('two.txt');
     });
 

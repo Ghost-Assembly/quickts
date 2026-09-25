@@ -27,11 +27,23 @@ class QuickMenuToggle extends FakeActor {
         super._init(props);
         this.menu = new QuickToggleMenu();
         this.checked = Boolean(props.checked);
+        // Deliberately NOT destroyed with the toggle. The real QuickSettingsItem
+        // never destroys its menu — Shell 50.3's quickSettings.js has no
+        // destroy call at all, and QuickSettingsMenu._completeAddItem parents
+        // the menu's actor into its own overlay — so an extension that does
+        // not destroy it leaks one menu per disable.
     }
 
-    /** Fire the toggle as a click would, flipping it first. */
+    /**
+     * Fire the toggle as a click would.
+     *
+     * St.Button flips `checked` itself before 'clicked' only in toggle mode,
+     * which is what lets a tile's checked state drift from the daemon's when
+     * nothing then re-syncs it.
+     */
     click() {
-        this.checked = !this.checked;
+        if (!this.reactive) return;
+        if (this.toggleMode) this.checked = !this.checked;
         this.emit('clicked', this);
     }
 }

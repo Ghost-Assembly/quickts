@@ -10,12 +10,9 @@
 // So the menu is built from the intersection: eligible nodes are actionable,
 // and the rest are shown grayed out with the daemon's own reason.
 //
-// This file imports nothing.
+// This file imports only other pure modules.
 
-// One collator, built once. Its compare() orders exactly as localeCompare()
-// does, but a bare localeCompare() call resolves a collator every time — and
-// this comparator runs over the whole tailnet.
-const collator = new Intl.Collator();
+import { compareNames } from './collate.js';
 
 /**
  * ipnstate.TaildropTargetStatus.
@@ -115,7 +112,7 @@ export function sendTargets(nodes, fileTargets) {
         .sort(
             (a, b) =>
                 Number(b.eligible) - Number(a.eligible) ||
-                collator.compare(a.node.name, b.node.name),
+                compareNames(a.node.name, b.node.name),
         );
 }
 
@@ -131,6 +128,26 @@ export function sendTargets(nodes, fileTargets) {
  */
 function unlistedReason(node) {
     return canReceive(node) ? TAILDROP.NO_PEER_API : node.taildropTarget;
+}
+
+/**
+ * Whether the daemon names a node as a file target.
+ *
+ * The authoritative half of {@link sendTargets} on its own, for a send that
+ * starts from somewhere other than the Taildrop list — a device's own row —
+ * and so has only a node id to check.
+ *
+ * @param {object[]} fileTargets The /file-targets response.
+ * @param {string} stableId The node to look for.
+ * @returns {boolean} True if the daemon lists it.
+ */
+export function isListedTarget(fileTargets, stableId) {
+    return (
+        Boolean(stableId) &&
+        (Array.isArray(fileTargets) ? fileTargets : []).some(
+            target => target?.Node?.StableID === stableId,
+        )
+    );
 }
 
 /**

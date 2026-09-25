@@ -6,17 +6,31 @@
 /** URIs modules/panel.js asked the desktop to open, in order. */
 export const launchedUris = [];
 
+/** The launch contexts passed with them, in the same order. */
+export const launchContexts = [];
+
+/** Set to an Error to make the next launch throw, as GIO does with no handler. */
+export const launchFailure = { next: null };
+
 /** Reset between tests. */
 export function resetGio() {
     launchedUris.length = 0;
+    launchContexts.length = 0;
+    launchFailure.next = null;
 }
 
 export default {
     icon_new_for_string: name => ({ name, isGicon: true }),
 
     AppInfo: {
-        launch_default_for_uri(uri) {
+        launch_default_for_uri(uri, context) {
+            if (launchFailure.next) {
+                const error = launchFailure.next;
+                launchFailure.next = null;
+                throw error;
+            }
             launchedUris.push(uri);
+            launchContexts.push(context);
             return true;
         },
     },

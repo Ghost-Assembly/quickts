@@ -17,6 +17,7 @@ function harness({ streams, stopAfter = Infinity }) {
     const delays = [];
     const events = [];
     const errors = [];
+    const opens = [];
     let connects = 0;
 
     return {
@@ -24,6 +25,7 @@ function harness({ streams, stopAfter = Infinity }) {
         delays,
         events,
         errors,
+        opens,
         get connects() {
             return connects;
         },
@@ -37,6 +39,7 @@ function harness({ streams, stopAfter = Infinity }) {
                 },
                 onEvent: event => events.push(event),
                 onError: error => errors.push(error),
+                onOpen: resumed => opens.push(resumed),
                 delay: ms => {
                     delays.push(ms);
                     if (delays.length >= stopAfter) {
@@ -113,7 +116,47 @@ describe('runWithReconnect', () => {
         expect(h.delays).toEqual([0, 1, 2]);
     });
 
-    it('comes straight back after a stream that delivered something', async () => {
+    // The bus says only what changes from here on, so whatever changed while
+    // it was down is never announced. The first line of each later stream is
+    // the moment to go and read it.
+    it('says when a stream opens, and whether one came before it', async () => {
+        const h = harness({
+            streams: [yields('a', 'b'), throws(new Error('x')), yields('c')],
+            stopAfter: 3,
+        });
+        await h.run();
+
+        expect(h.opens).toEqual([false, true]);
+    });
+
+    it('does not report a stream that produced nothing as open', async () => {
+        const h = harness({ streams: [yields()], stopAfter: 2 });
+        await h.run();
+
+        expect(h.opens).toEqual([]);
+    });
+
+    it('delivers the first event after reporting the stream open', async () => {
+        const order = [];
+        const token = new CancelToken();
+
+        await runWithReconnect({
+            token,
+            connect: yields('first'),
+            onOpen: () => order.push('open'),
+            onEvent: event => order.push(event),
+            onError: () => {},
+            delay: () => {
+                token.cancel();
+                return Promise.reject(new CanceledError());
+            },
+            backoff: () => 0,
+        });
+
+        expect(order).toEqual(['open', 'first']);
+    });
+
+    it('comes back after a short wait once a stream delivered something', async () => {
         const h = harness({
             streams: [
                 throws(new Error('x')),

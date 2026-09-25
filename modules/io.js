@@ -17,23 +17,20 @@ import Soup from 'gi://Soup?version=3.0';
 
 import { CanceledError } from './cancel.js';
 import { REASON, TransportError } from './errors.js';
-import { uniqueName } from './inbox.js';
+import { candidateNames, isSafeFileName } from './inbox.js';
 import { HOST, SOCKET_PATHS, pickSocket } from './localapi.js';
 
 // Promisified once, at module scope, because gnome-shell caches ESM modules for
 // the life of the session — so this runs exactly once however many times the
-// extension is enabled. The extension QuickTS replaces called _promisify inside
-// its read loop, re-patching the prototype on every line of the stream.
+// extension is enabled, rather than re-patching a prototype per call.
 Gio._promisify(Soup.Session.prototype, 'send_async', 'send_finish');
 Gio._promisify(Soup.Session.prototype, 'send_and_read_async', 'send_and_read_finish');
 Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_finish');
 Gio._promisify(Gio.File.prototype, 'read_async', 'read_finish');
 Gio._promisify(Gio.File.prototype, 'query_info_async', 'query_info_finish');
-Gio._promisify(
-    Gio.File.prototype,
-    'replace_contents_bytes_async',
-    'replace_contents_finish',
-);
+Gio._promisify(Gio.File.prototype, 'create_async', 'create_finish');
+Gio._promisify(Gio.File.prototype, 'delete_async', 'delete_finish');
+Gio._promisify(Gio.OutputStream.prototype, 'splice_async', 'splice_finish');
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -75,11 +72,6 @@ function translate(error) {
 
 /**
  * Wrap a caught value, keeping something readable in the message.
- *
- * Interpolating the value directly renders a plain object as "[object Object]",
- * which is the least useful thing that could reach the journal at the moment
- * something has gone wrong. A GError carries a real message; anything else
- * falls back to its own String() form.
  *
  * @param {string} reason One of REASON.
  * @param {unknown} error The caught value, kept as the cause.
@@ -163,6 +155,43 @@ function decode(message, bytes) {
 }
 
 /**
+ * Close a stream, ignoring why it could not be.
+ *
+ * Deliberately with a null cancellable. By the time this runs during a
+ * disable the lifetime's cancellable is already canceled, and closing with a
+ * canceled cancellable fails immediately — throwing out of a cleanup path,
+ * which would replace the real error with a bogus one and skip the rest of
+ * teardown. A stream that is already closed is not a fault either.
+ *
+ * @param {object|null} stream A Gio input or output stream.
+ */
+function closeQuietly(stream) {
+    try {
+        stream?.close(null);
+    } catch {
+        // Already closed, or gone with its connection.
+    }
+}
+
+/**
+ * Where a received file is saved.
+ *
+ * The XDG download directory, or ~/Downloads when none is configured — never
+ * the home directory itself, where a file named after a dot file or a
+ * well-known config would sit among the things that configure the session.
+ *
+ * @returns {string} An existing directory.
+ */
+function downloadDirectory() {
+    const configured = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD);
+    if (configured) return configured;
+
+    const fallback = GLib.build_filenamev([GLib.get_home_dir(), 'Downloads']);
+    GLib.mkdir_with_parents(fallback, 0o755);
+    return fallback;
+}
+
+/**
  * Withdraw a portal request.
  *
  * Extracted so the cancellation handler is not a callback inside a callback
@@ -199,39 +228,52 @@ function closeRequest(bus, handle) {
  * @returns {object} The client, the scheduler, and a dispose().
  */
 export function createIo({ token }) {
-    const socket = pickSocket(SOCKET_PATHS, path =>
-        GLib.file_test(path, GLib.FileTest.EXISTS),
-    );
-
     // One Cancellable for the lifetime, bridged from the token once. Every
-    // async call below is handed it; none is ever handed null, which is what
-    // left the previous extension unable to interrupt a request at all.
+    // async call below is handed it; none is ever handed null, which would
+    // leave a request that no disable could interrupt.
     const cancellable = new Gio.Cancellable();
     token.onCancel(() => cancellable.cancel());
 
-    const session = socket
-        ? new Soup.Session({
-              // Every request goes to this socket regardless of the URL's host.
-              'remote-connectable': new Gio.UnixSocketAddress({ path: socket }),
-              // The IPN bus is a long poll that is idle most of the time.
-              // Either timeout would tear it down on a quiet tailnet.
-              timeout: 0,
-              'idle-timeout': 0,
-          })
-        : null;
+    // Both resolved on first use and kept, not fixed at enable. Tailscale
+    // installed, or tailscaled started for the first time, after the Shell
+    // came up leaves no socket to find at enable — and a transport that had
+    // looked once and given up would report it missing until the next
+    // login, however long the reconnect loop kept trying.
+    let socket = null;
+    let session = null;
 
     /** Live GLib source ids, so dispose() can prove none outlived the token. */
     const sources = new Set();
 
     const url = path => `http://${HOST}${path}`;
 
+    /**
+     * The session, created the first time a socket exists.
+     *
+     * @returns {object} A Soup.Session bound to the socket.
+     */
     const ready = () => {
+        token.throwIfCanceled();
+        if (session) return session;
+
+        socket = pickSocket(SOCKET_PATHS, path =>
+            GLib.file_test(path, GLib.FileTest.EXISTS),
+        );
         if (!socket)
             throw new TransportError(
                 REASON.SOCKET_MISSING,
                 `no tailscaled socket at ${SOCKET_PATHS.join(' or ')}`,
             );
-        token.throwIfCanceled();
+
+        session = new Soup.Session({
+            // Every request goes to this socket regardless of the URL's host.
+            'remote-connectable': new Gio.UnixSocketAddress({ path: socket }),
+            // The IPN bus is a long poll that is idle most of the time.
+            // Either timeout would tear it down on a quiet tailnet.
+            timeout: 0,
+            'idle-timeout': 0,
+        });
+        return session;
     };
 
     const build = ({ method, path, body }) => {
@@ -255,7 +297,7 @@ export function createIo({ token }) {
      * @returns {Promise<object>} The body, as GLib.Bytes.
      */
     const sendAndRead = async message => {
-        const bytes = await session.send_and_read_async(
+        const bytes = await ready().send_and_read_async(
             message,
             GLib.PRIORITY_DEFAULT,
             cancellable,
@@ -267,9 +309,48 @@ export function createIo({ token }) {
         return bytes;
     };
 
+    /**
+     * Send a message and return its body as a stream, refusing a failing
+     * status.
+     *
+     * The body stream of a refused answer is closed before the error is
+     * thrown; left open, each refusal would hold its connection until the
+     * session was torn down.
+     *
+     * @param {object} message A Soup.Message.
+     * @returns {Promise<object>} The body, as a Gio.InputStream.
+     */
+    const sendForStream = async message => {
+        const input = await ready().send_async(
+            message,
+            GLib.PRIORITY_DEFAULT,
+            cancellable,
+        );
+
+        const failure = statusError(message);
+        if (failure) {
+            closeQuietly(input);
+            throw failure;
+        }
+
+        return input;
+    };
+
     return {
-        /** The socket in use, or null. Reported by scripts/localapi-check.sh. */
-        socket,
+        /**
+         * The socket in use, resolving it if nothing has yet. Null when
+         * there is none. Reported by scripts/localapi-check.sh.
+         *
+         * @returns {string|null} A socket path.
+         */
+        get socket() {
+            try {
+                ready();
+            } catch {
+                // Missing, which the null below says.
+            }
+            return socket;
+        },
 
         client: {
             /**
@@ -298,19 +379,9 @@ export function createIo({ token }) {
              * @yields {string} One line, without its terminator.
              */
             async *stream(descriptor) {
-                ready();
-                const message = build(descriptor);
-
                 let input;
                 try {
-                    input = await session.send_async(
-                        message,
-                        GLib.PRIORITY_DEFAULT,
-                        cancellable,
-                    );
-
-                    const failure = statusError(message);
-                    if (failure) throw failure;
+                    input = await sendForStream(build(descriptor));
                 } catch (error) {
                     throw translate(error);
                 }
@@ -333,17 +404,7 @@ export function createIo({ token }) {
                 } catch (error) {
                     throw translate(error);
                 } finally {
-                    // Deliberately null, not `cancellable`. By the time this
-                    // runs during a disable the cancellable is already
-                    // canceled, and g_input_stream_close on a canceled
-                    // cancellable fails immediately — throwing out of a finally
-                    // block, which would replace the real error with a bogus
-                    // one and skip the rest of teardown.
-                    try {
-                        lines.close(null);
-                    } catch {
-                        // Closing a stream that is already gone is not a fault.
-                    }
+                    closeQuietly(lines);
                 }
             },
 
@@ -359,8 +420,6 @@ export function createIo({ token }) {
              * @returns {Promise<void>} Resolves once the daemon has accepted it.
              */
             async putFile(descriptor, uri) {
-                ready();
-
                 try {
                     const file = Gio.File.new_for_uri(uri);
                     const info = await file.query_info_async(
@@ -433,10 +492,13 @@ export function createIo({ token }) {
 
                 let offCancel = () => {};
                 let subscription = 0;
-                const finish = value => {
+                const release = () => {
                     if (subscription) bus.signal_unsubscribe(subscription);
                     subscription = 0;
                     offCancel();
+                };
+                const finish = value => {
+                    release();
                     resolve(value);
                 };
 
@@ -480,9 +542,7 @@ export function createIo({ token }) {
                         try {
                             [handle] = source.call_finish(result).deepUnpack();
                         } catch (error) {
-                            if (subscription) bus.signal_unsubscribe(subscription);
-                            subscription = 0;
-                            offCancel();
+                            release();
                             reject(translate(error));
                             return;
                         }
@@ -507,45 +567,82 @@ export function createIo({ token }) {
          * dialog, and this is where `tailscale file get` and every browser
          * put things.
          *
+         * Streamed, never buffered. A Taildrop file can be many gigabytes,
+         * and reading one whole into gnome-shell's heap would take the
+         * compositor — and with it the Wayland session — down with it. The
+         * body goes from Soup's stream to the file's in bounded chunks.
+         *
+         * Created, never replaced. Each candidate name is opened with
+         * O_CREAT|O_EXCL, which fails on anything already there — including
+         * a symlink, dangling or not — so there is no window between checking
+         * a name and writing it, and nothing planted in the directory is
+         * followed or overwritten. The name itself is checked first: the
+         * sender chose it.
+         *
          * Written before the caller deletes it from the daemon. The reverse
-         * order loses the file if the write fails.
+         * order loses the file if the write fails; a write that fails part
+         * way removes what it wrote.
          *
          * @param {{method: string, path: string}} descriptor From modules/localapi.js.
          * @param {string} name The name as sent.
          * @returns {Promise<string>} The path written.
          */
         async saveFile(descriptor, name) {
-            ready();
-
-            try {
-                const message = build(descriptor);
-                const bytes = await sendAndRead(message);
-
-                const directory =
-                    GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) ??
-                    GLib.get_home_dir();
-
-                // Two people can both send "report.pdf"; a save that
-                // overwrites is a save that loses data.
-                const unique = uniqueName(name, candidate =>
-                    GLib.file_test(
-                        GLib.build_filenamev([directory, candidate]),
-                        GLib.FileTest.EXISTS,
-                    ),
+            if (!isSafeFileName(name))
+                throw new TransportError(
+                    REASON.PROTOCOL,
+                    'refusing an unsafe file name',
                 );
 
-                const path = GLib.build_filenamev([directory, unique]);
-                await Gio.File.new_for_path(path).replace_contents_bytes_async(
-                    bytes,
-                    null,
-                    false,
-                    Gio.FileCreateFlags.NONE,
+            let input = null;
+            let output = null;
+            let file = null;
+
+            try {
+                input = await sendForStream(build(descriptor));
+
+                const directory = downloadDirectory();
+                for (const candidate of candidateNames(name)) {
+                    file = Gio.File.new_for_path(
+                        GLib.build_filenamev([directory, candidate]),
+                    );
+                    try {
+                        output = await file.create_async(
+                            Gio.FileCreateFlags.NONE,
+                            GLib.PRIORITY_DEFAULT,
+                            cancellable,
+                        );
+                        break;
+                    } catch (error) {
+                        if (!error?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS))
+                            throw error;
+                        file = null;
+                    }
+                }
+
+                if (!output)
+                    throw new TransportError(REASON.UNKNOWN, 'no free file name');
+
+                await output.splice_async(
+                    input,
+                    Gio.OutputStreamSpliceFlags.CLOSE_SOURCE |
+                        Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
+                    GLib.PRIORITY_DEFAULT,
                     cancellable,
                 );
 
-                return path;
+                return file.get_path();
             } catch (error) {
+                // A half-written file is worse than none: it looks saved.
+                // Null cancellable, for the reason closeQuietly gives.
+                if (output)
+                    await file
+                        ?.delete_async(GLib.PRIORITY_DEFAULT, null)
+                        .catch(() => {});
                 throw translate(error);
+            } finally {
+                closeQuietly(output);
+                closeQuietly(input);
             }
         },
 
@@ -554,10 +651,10 @@ export function createIo({ token }) {
              * Wait, unless the token is canceled first.
              *
              * Canceling removes the source *and* rejects the promise, in one
-             * callback. That pairing is the entire point. The extension QuickTS
-             * replaces removes the source from somewhere else entirely, so the
-             * timeout callback never runs, the promise never settles, and the
-             * reconnect loop awaiting it is stranded for the life of the Shell.
+             * callback. That pairing is the entire point. Removing the source
+             * from anywhere else means the timeout callback never runs, the
+             * promise never settles, and the reconnect loop awaiting it is
+             * stranded for the life of the Shell.
              *
              * @param {number} ms Milliseconds to wait.
              * @returns {Promise<void>} Resolves after the wait, rejects on cancel.
@@ -590,8 +687,7 @@ export function createIo({ token }) {
          * Release everything.
          *
          * The token is expected to have been canceled already, which is what
-         * drains `sources`; the check below is a self-audit, and it is exactly
-         * the assertion the replaced extension would fail.
+         * drains `sources`; the check below is a self-audit.
          */
         dispose() {
             if (sources.size > 0) {

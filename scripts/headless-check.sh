@@ -3,16 +3,25 @@
 # it enables cleanly, disables cleanly, and can be enabled again without
 # leaking.
 #
-# The enable/disable/enable cycle is the point. It is the exact shape of the bug
-# in the extension QuickTS replaces: its watch loop awaits a GLib timeout that
-# disable() removes out from under it, so the promise never settles, the loop
-# never returns, and the Soup session and its input stream stay alive for the
-# rest of the session. A single enable would never show it.
+# The enable/disable/enable cycle is the point. It is the shape of the classic
+# extension leak: a watch loop awaiting a GLib timeout that disable() removes
+# out from under it, so the promise never settles, the loop never returns, and
+# the Soup session and its input stream stay alive for the rest of the session.
+# A single enable would never show it.
 #
 # This needs a real gnome-shell and so runs locally only; GitHub's runners have
 # no GNOME 50.
 
 set -euo pipefail
+
+# The system's GLib tools, not whichever are first on PATH. A Homebrew GLib
+# (pulled in as a dependency of something else) ships its own gsettings built
+# without the dconf module: it silently falls back to a keyfile, the value
+# reads back fine from gsettings itself, and the shell under test never sees
+# it — so the extension is never enabled and the check times out with no
+# error. Everything here must speak to the same GLib gnome-shell was built
+# against.
+export PATH="/usr/bin:$PATH"
 
 UUID="quickts@napalm255.github.io"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,8 +52,7 @@ LOG="$WORK/shell.log"
 EXT_DIR="$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
 mkdir -p "$EXT_DIR"
 cp -r "$REPO_ROOT"/metadata.json "$REPO_ROOT"/extension.js "$REPO_ROOT"/prefs.js \
-      "$REPO_ROOT"/stylesheet.css "$REPO_ROOT"/modules "$REPO_ROOT"/schemas \
-      "$REPO_ROOT"/icons "$EXT_DIR/"
+      "$REPO_ROOT"/modules "$REPO_ROOT"/schemas "$REPO_ROOT"/icons "$EXT_DIR/"
 glib-compile-schemas "$EXT_DIR/schemas"
 
 gsettings set org.gnome.shell disable-user-extensions false
@@ -55,6 +63,15 @@ gsettings set org.gnome.shell enabled-extensions "['$UUID']"
 enabled="$(gsettings get org.gnome.shell enabled-extensions)"
 if [[ "$enabled" != "['$UUID']" ]]; then
     echo "FAIL: dconf is not isolated; enabled-extensions = $enabled" >&2
+    rm -rf "$WORK"
+    exit 1
+fi
+
+# And read it back through dconf itself, not gsettings: a gsettings built
+# without the dconf module writes to a keyfile, reads its own write back and
+# passes the guard above, while the Shell reads dconf and sees nothing.
+if [[ "$(dconf read /org/gnome/shell/enabled-extensions)" != "['$UUID']" ]]; then
+    echo "FAIL: gsettings is not writing to dconf; check which gsettings is on PATH" >&2
     rm -rf "$WORK"
     exit 1
 fi
@@ -124,8 +141,7 @@ if grep -qaiE 'No signal handler|instance with invalid|Object .* has been alread
 fi
 
 # The watch loop must not survive its disable. A source removed without its
-# awaiter being settled shows up here, and this is the assertion the replaced
-# extension would fail.
+# awaiter being settled shows up here.
 if grep -qaiE 'Source ID .* was not found|GSource .* still active' "$LOG"; then
     fail "a GLib source outlived its disable"
 fi

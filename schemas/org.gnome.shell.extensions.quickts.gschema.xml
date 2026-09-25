@@ -36,8 +36,11 @@
       Unbound by default. A single convenience shortcut is not worth the risk
       of colliding with one of the accelerators GNOME 50 already claims, and
       the preferences window offers a capture field for choosing one.
+
+      Prefixed because Mutter registers keybindings by this NAME in one table
+      shared by the whole Shell, and refuses a name that is already taken.
     -->
-    <key type="as" name="open-menu">
+    <key type="as" name="quickts-open-menu">
       <default><![CDATA[[]]]></default>
       <summary>Open the QuickTS menu</summary>
       <description>Open the quick settings menu with QuickTS expanded.</description>

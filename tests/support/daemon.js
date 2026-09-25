@@ -4,9 +4,46 @@
 // a delay. There is no GNOME type anywhere in it, which is why the model — the
 // reconnect loop, the refresh policy and the failure handling included — runs
 // under Vitest with no stubs at all.
+//
+// It behaves like a Linux tailscaled of the version QuickTS targets, not like
+// the one the tests would find convenient. A fake that sent a runtime NetMap
+// kept the suite green for a peer list that never refreshed on a real
+// machine, so each rule below is a real daemon's:
+//
+//   The subscription mask is honored. Fields the mask did not ask for are
+//   never sent, and NotifyRateLimit alongside a delta bit is refused with a
+//   400, as ipn.ValidateNotifyWatchOpt refuses it.
+//
+//   NetMap is never sent after the first message. ipn/ipnlocal/bus.go sends
+//   it at runtime only on Windows since Tailscale 1.100.
+//
+//   NotifyInitialState answers at once with the current State.
+//
+//   /file-targets fails with a 500 unless the backend is Running, which is
+//   what the Taildrop extension's FileTargets() error turns into.
 
 import { CancelToken, CanceledError } from '../../modules/cancel.js';
+import { REASON, TransportError } from '../../modules/errors.js';
+import { NOTIFY } from '../../modules/localapi.js';
 import { SUFFIX, rawPeer, rawPeerMap } from '../fixtures/peers.js';
+
+/** ipn.State, as the bus carries it. */
+const STATE_NUMBER = new Map([
+    ['NoState', 0],
+    ['InUseOtherUser', 1],
+    ['NeedsLogin', 2],
+    ['NeedsMachineAuth', 3],
+    ['Stopped', 4],
+    ['Starting', 5],
+    ['Running', 6],
+]);
+
+/** NotifyRateLimit, which no longer appears in modules/localapi.js. */
+const RATE_LIMIT = 1 << 8;
+
+/** The bits ipn.ValidateNotifyWatchOpt will not combine with RATE_LIMIT. */
+const RATE_LIMIT_INCOMPATIBLE =
+    NOTIFY.PEER_CHANGES | (1 << 13) | (1 << 14) | NOTIFY.PEER_PATCHES;
 
 /**
  * Build a fake client whose answers a test can set.
@@ -82,8 +119,17 @@ export function createDaemon(seed = {}) {
             if (path.startsWith('/localapi/v0/profiles/current'))
                 return responses.current;
             if (path.startsWith('/localapi/v0/profiles')) return responses.profiles;
-            if (path.startsWith('/localapi/v0/file-targets'))
+            if (path.startsWith('/localapi/v0/file-targets')) {
+                if (responses.status.BackendState !== 'Running')
+                    throw new TransportError(
+                        REASON.HTTP,
+                        'HTTP 500 Internal Server Error',
+                        {
+                            status: 500,
+                        },
+                    );
                 return responses.fileTargets;
+            }
             if (path.startsWith('/localapi/v0/ping')) return responses.ping;
             if (path.startsWith('/localapi/v0/suggest-exit-node'))
                 return responses.suggestion;
@@ -117,11 +163,35 @@ export function createDaemon(seed = {}) {
         async *stream({ path }) {
             paths.push(path);
 
+            const mask = Number(
+                new URL(path, 'http://x').searchParams.get('mask') ?? 0,
+            );
+            if (mask & RATE_LIMIT && mask & RATE_LIMIT_INCOMPATIBLE)
+                throw new TransportError(REASON.HTTP, 'HTTP 400 Bad Request', {
+                    status: 400,
+                });
+
             const queue = [];
             let wake = null;
             let ended = false;
 
+            if (mask & NOTIFY.INITIAL_STATE)
+                queue.push(
+                    JSON.stringify({
+                        Version: '1.102.3',
+                        SessionID: 'session',
+                        ErrMessage: null,
+                        LoginFinished: null,
+                        State: STATE_NUMBER.get(responses.status.BackendState) ?? 0,
+                        Prefs: null,
+                        NetMap: null,
+                        Engine: null,
+                        BrowseToURL: null,
+                    }),
+                );
+
             streamController = {
+                mask,
                 push(line) {
                     queue.push(line);
                     wake?.();
@@ -155,9 +225,30 @@ export function createDaemon(seed = {}) {
         saved,
         token: new CancelToken(),
 
-        /** Send one line down the open bus. */
+        /**
+         * Send one notification down the open bus, as the daemon would.
+         *
+         * Fields the subscription did not ask for are dropped, and a
+         * notification left with nothing in it is not sent at all.
+         */
         emit(notify) {
-            streamController?.push(JSON.stringify(notify));
+            if (!streamController) return;
+
+            const shaped = shapeFor(notify, streamController.mask);
+            if (shaped !== null) streamController.push(JSON.stringify(shaped));
+        },
+
+        /**
+         * Announce a new netmap the way a Linux tailscaled does: SelfChange
+         * always, PeersChanged only for a subscriber that asked for it, and
+         * no NetMap.
+         */
+        netmapChanged() {
+            this.emit({
+                SelfChange: { ID: 1 },
+                PeersChanged: Object.values(responses.status.Peer ?? {}),
+                NetMap: { Peers: [] },
+            });
         },
 
         /** Close the open bus. */
@@ -175,6 +266,40 @@ export function createDaemon(seed = {}) {
             patches.length = 0;
         },
     };
+}
+
+/**
+ * What a Linux tailscaled would actually send for a notification.
+ *
+ * @param {unknown} notify What the test asked to send.
+ * @param {number} mask The subscription mask.
+ * @returns {unknown} The notification as sent, or null if nothing is left.
+ */
+function shapeFor(notify, mask) {
+    // A malformed line is passed through untouched; it is what the test is
+    // exercising.
+    if (notify === null || typeof notify !== 'object') return notify;
+
+    const peerChanges = Boolean(mask & (NOTIFY.PEER_CHANGES | NOTIFY.PEER_PATCHES));
+    const patches = Boolean(mask & NOTIFY.PEER_PATCHES);
+
+    const shaped = { ...notify };
+    delete shaped.NetMap;
+    if (!peerChanges) {
+        delete shaped.PeersChanged;
+        delete shaped.PeersRemoved;
+        delete shaped.UserProfiles;
+    }
+    if (!patches) {
+        // Promoted rather than dropped for a PEER_CHANGES subscriber.
+        if (peerChanges && shaped.PeerChangedPatch)
+            shaped.PeersChanged = [...(shaped.PeersChanged ?? []), {}];
+        delete shaped.PeerChangedPatch;
+    }
+
+    return Object.keys(shaped).length === 0 && Object.keys(notify).length > 0
+        ? null
+        : shaped;
 }
 
 /**

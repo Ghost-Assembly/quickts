@@ -5,8 +5,8 @@
 //
 // Nothing here runs at import time. Creating an object, connecting a signal or
 // touching the Shell during module evaluation is forbidden by the review
-// guidelines, and it is also how the extension QuickTS replaces ends up
-// holding a reference to the quick settings panel across a disable.
+// guidelines, and is how an extension ends up holding a reference to the
+// quick settings panel across a disable.
 
 import {
     Extension,

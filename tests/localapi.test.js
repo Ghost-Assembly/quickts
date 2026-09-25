@@ -182,7 +182,7 @@ describe('watchBusRequest', () => {
     it('subscribes with the mask QuickTS needs', () => {
         expect(watchBusRequest()).toEqual({
             method: 'GET',
-            path: '/localapi/v0/watch-ipn-bus?mask=258',
+            path: '/localapi/v0/watch-ipn-bus?mask=4098',
         });
     });
 
@@ -193,10 +193,17 @@ describe('watchBusRequest', () => {
         expect(WATCH_MASK & NOTIFY.INITIAL_STATE).toBeTruthy();
     });
 
-    // Complementary to flushDelay, not a replacement: the daemon throttles what
-    // it sends, QuickTS still batches what it receives.
-    it('lets the daemon rate-limit netmap bursts', () => {
-        expect(WATCH_MASK & NOTIFY.RATE_LIMIT).toBeTruthy();
+    // Since Tailscale 1.100 a Linux tailscaled sends no runtime NetMap at all
+    // (ipn/ipnlocal/bus.go: goosGetsLegacyNetmapNotify is Windows-only), so
+    // without this bit nothing on the bus says a peer came or went.
+    it('asks for peer changes', () => {
+        expect(WATCH_MASK & NOTIFY.PEER_CHANGES).toBeTruthy();
+    });
+
+    // ipn.ValidateNotifyWatchOpt rejects NotifyRateLimit combined with any of
+    // the delta bits with a 400, so asking for both loses the whole stream.
+    it('does not ask the daemon to rate-limit', () => {
+        expect(WATCH_MASK & (1 << 8)).toBe(0);
     });
 
     it('accepts an explicit mask', () => {

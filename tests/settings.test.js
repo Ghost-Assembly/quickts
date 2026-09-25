@@ -75,8 +75,18 @@ describe('the schema itself', () => {
     // of colliding with one of the accelerators GNOME already claims, and
     // prefs.js offers a capture field for choosing one.
     it('ships the shortcut unbound', () => {
-        expect(SHORTCUT_KEYS.OPEN_MENU).toBe('open-menu');
-        expect(xml).toMatch(/name="open-menu">\s*<default><!\[CDATA\[\[\]\]\]>/);
+        expect(xml).toMatch(
+            /name="quickts-open-menu">\s*<default><!\[CDATA\[\[\]\]\]>/,
+        );
+    });
+
+    // Mutter keeps one table of keybinding NAMES for the whole Shell and
+    // refuses a second registration of a name — any extension's, or the
+    // Shell's own. A bare "open-menu" is a name another extension could
+    // plausibly also choose, and whichever enabled second would silently
+    // have no shortcut.
+    it('names the shortcut so it cannot collide with another extension', () => {
+        expect(SHORTCUT_KEYS.OPEN_MENU).toBe('quickts-open-menu');
     });
 
     it('bounds the menu height', () => {

@@ -308,7 +308,7 @@ describe('the refresh policy', () => {
         await settle();
         daemon.reset();
 
-        daemon.emit({ NetMap: { Peers: [] } });
+        daemon.netmapChanged();
         await settle();
 
         expect(daemon.pathsMatching('peers=false')).toHaveLength(1);
@@ -322,7 +322,7 @@ describe('the refresh policy', () => {
         await settle();
         daemon.reset();
 
-        daemon.emit({ NetMap: { Peers: [] } });
+        daemon.netmapChanged();
         await settle();
 
         expect(daemon.pathsMatching('peers=false')).toHaveLength(0);
@@ -334,7 +334,7 @@ describe('the refresh policy', () => {
         await model.start();
         await settle();
 
-        daemon.emit({ NetMap: { Peers: [] } });
+        daemon.netmapChanged();
         await settle();
         daemon.reset();
 
@@ -357,6 +357,51 @@ describe('the refresh policy', () => {
         expect(daemon.paths).toEqual([]);
     });
 
+    // tailscaled 1.100 and later on Linux never sends a runtime NetMap; this
+    // is what a new netmap actually looks like on the bus there.
+    it('reads the peer map for a netmap announced without NetMap', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        model.setMenuOpen(true);
+        await settle();
+        daemon.reset();
+
+        daemon.emit({ SelfChange: { ID: 1 } });
+        await settle();
+
+        expect(daemon.pathsMatching('/localapi/v0/status')).toEqual([
+            '/localapi/v0/status',
+        ]);
+    });
+
+    it('re-reads a stale peer map when the menu opens, flagged or not', async () => {
+        const { model, daemon, clock } = setup();
+        await model.start();
+        await settle();
+        clock.advance(PEERS_STALE_MS + 1);
+        daemon.reset();
+
+        model.setMenuOpen(true);
+        await settle();
+
+        expect(daemon.pathsMatching('/localapi/v0/status')).toEqual([
+            '/localapi/v0/status',
+        ]);
+    });
+
+    it('re-reads the status for a health change', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        await settle();
+        daemon.reset();
+
+        daemon.responses.status.Health = ['something new'];
+        daemon.emit({ Health: { Warnings: {} } });
+        await settle();
+
+        expect(model.state.health).toEqual(['something new']);
+    });
+
     it('reads the peer map anyway once it has gone stale', async () => {
         const { model, daemon, clock } = setup();
         await model.start();
@@ -364,7 +409,7 @@ describe('the refresh policy', () => {
         clock.advance(PEERS_STALE_MS + 1);
         daemon.reset();
 
-        daemon.emit({ NetMap: { Peers: [] } });
+        daemon.netmapChanged();
         await settle();
 
         expect(daemon.pathsMatching('peers=false')).toHaveLength(0);
@@ -506,7 +551,7 @@ describe('bus updates reaching the state', () => {
             rawPeer(),
             rawPeer({ ID: 'nNEW', DNSName: `newcomer.${SUFFIX}.` }),
         );
-        daemon.emit({ NetMap: {} });
+        daemon.netmapChanged();
         await settle();
 
         expect(model.state.nodes.map(node => node.name)).toContain('newcomer');
@@ -523,6 +568,90 @@ describe('bus updates reaching the state', () => {
 
         expect(model.state.errorReason).toBe('');
         expect(model.state.reachable).toBe(true);
+    });
+});
+
+describe('profiles', () => {
+    // `tailscale switch` from a terminal. The daemon announces it as new
+    // preferences, and nothing else on the bus names the profile.
+    it('follows a profile switched outside the menu', async () => {
+        const { model, daemon } = setup({
+            profiles: [
+                { ID: '1', Name: 'work' },
+                { ID: '2', Name: 'home' },
+            ],
+        });
+        await model.start();
+        await settle();
+
+        daemon.responses.current = { ID: '2' };
+        daemon.emit({ Prefs: {} });
+        await settle();
+
+        expect(model.state.currentProfileId).toBe('2');
+    });
+});
+
+describe('recovering from an outage', () => {
+    // The first message on a new stream says only State. Everything that
+    // changed while the daemon was away — preferences, profiles, peers — is
+    // never announced, so it has to be read.
+    it('re-reads preferences, profiles and peers once the bus is back', async () => {
+        const { model, daemon } = setup();
+        const realStream = daemon.client.stream;
+        let dropped = false;
+        daemon.client.stream = function (descriptor) {
+            if (!dropped) {
+                dropped = true;
+                return (async function* () {
+                    throw new TransportError(REASON.CONNECTION_REFUSED, 'refused');
+                    // eslint-disable-next-line no-unreachable
+                    yield '';
+                })();
+            }
+            return realStream.call(daemon.client, descriptor);
+        };
+
+        daemon.failures.set(
+            '/localapi/v0/',
+            new TransportError(REASON.CONNECTION_REFUSED, 'refused'),
+        );
+        await model.start();
+        expect(model.state.reachable).toBe(false);
+
+        // The daemon comes back with a different world.
+        daemon.failures.clear();
+        daemon.responses.prefs.ShieldsUp = true;
+        daemon.responses.profiles = [
+            { ID: '1', Name: 'work' },
+            { ID: '2', Name: 'home' },
+        ];
+        daemon.responses.status.Peer = rawPeerMap(
+            rawPeer(),
+            rawPeer({ ID: 'nNEW', DNSName: `newcomer.${SUFFIX}.` }),
+        );
+        await settle(30);
+
+        expect(model.state.reachable).toBe(true);
+        expect(model.state.shieldsUp).toBe(true);
+        expect(model.state.profiles).toHaveLength(2);
+        expect(model.state.nodes.map(node => node.name)).toContain('newcomer');
+    });
+
+    it('does not re-read everything for the first stream after start', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        await settle();
+
+        // start() read everything once; the initial-state message after it
+        // needs only the cheap status.
+        expect(
+            daemon.paths.filter(path => path === '/localapi/v0/profiles/'),
+        ).toHaveLength(1);
+        expect(daemon.pathsMatching('/localapi/v0/status')).toEqual([
+            '/localapi/v0/status',
+            '/localapi/v0/status?peers=false',
+        ]);
     });
 });
 
@@ -557,11 +686,13 @@ describe('failures that reach the state', () => {
             }
             return realStream.call(daemon.client, descriptor);
         };
+        const reasons = [];
+        model.subscribe(state => reasons.push(state.errorReason));
 
         await model.start();
         await settle();
 
-        expect(model.state.errorReason).toBe(REASON.CONNECTION_REFUSED);
+        expect(reasons).toContain(REASON.CONNECTION_REFUSED);
         expect(waits.length).toBeGreaterThan(0);
     });
 
@@ -829,6 +960,24 @@ describe('waiting files', () => {
         expect(daemon.deleted.at(-1)).toContain('a.txt');
     });
 
+    // tailscaled validates names on the way in; this is where one becomes a
+    // path here, so it is checked again rather than trusted.
+    it.each(['../escape.txt', '.bashrc', 'sub/dir.txt'])(
+        'refuses to save %s, and does not forget it',
+        async name => {
+            const { model, daemon } = setup();
+            await model.start();
+            daemon.reset();
+
+            const result = await model.saveFile(name);
+
+            expect(result.error).toMatch(/\S/);
+            expect(daemon.saved).toEqual([]);
+            expect(daemon.deleted).toEqual([]);
+            expect(daemon.paths).toEqual([]);
+        },
+    );
+
     it('does not forget a file it could not write', async () => {
         const { model, daemon } = setup();
         await model.start();
@@ -853,6 +1002,30 @@ describe('waiting files', () => {
 
         expect(await model.waitingFiles()).toEqual([]);
     });
+
+    // Taildrop failing is a fact about Taildrop, not about the daemon.
+    it('does not mark the daemon unreachable when the list fails', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set(
+            '/localapi/v0/files',
+            new TransportError(REASON.HTTP, '500'),
+        );
+
+        await model.waitingFiles();
+
+        expect(model.state.reachable).toBe(true);
+    });
+
+    it('does not ask while the tailnet is down', async () => {
+        const { model, daemon } = setup();
+        daemon.responses.status.BackendState = 'Stopped';
+        await model.start();
+        daemon.reset();
+
+        expect(await model.waitingFiles()).toEqual([]);
+        expect(daemon.paths).toEqual([]);
+    });
 });
 
 describe('fileTargets', () => {
@@ -863,7 +1036,10 @@ describe('fileTargets', () => {
         expect(await model.fileTargets()).toHaveLength(1);
     });
 
-    it('returns nothing rather than throwing when the daemon refuses', async () => {
+    // What a tailnet with Taildrop turned off answers. It says nothing about
+    // whether the daemon is reachable, and must not draw "the daemon refused
+    // the request" over a menu that is otherwise working.
+    it('returns nothing, and stays reachable, when the daemon refuses', async () => {
         const { model, daemon } = setup();
         await model.start();
         daemon.failures.set(
@@ -872,7 +1048,25 @@ describe('fileTargets', () => {
         );
 
         expect(await model.fileTargets()).toEqual([]);
+        expect(model.state.reachable).toBe(true);
     });
+
+    // The daemon answers 500 unless it is Running.
+    it.each(['Stopped', 'NeedsLogin', 'Starting'])(
+        'does not ask while the backend is %s',
+        async backendState => {
+            const { model, daemon } = setup({
+                fileTargets: [{ Node: { StableID: 'nA' } }],
+            });
+            daemon.responses.status.BackendState = backendState;
+            await model.start();
+            daemon.reset();
+
+            expect(await model.fileTargets()).toEqual([]);
+            expect(daemon.paths).toEqual([]);
+            expect(model.state.reachable).toBe(true);
+        },
+    );
 
     it('returns nothing once destroyed', async () => {
         const { model } = setup({ fileTargets: [{ Node: { StableID: 'nA' } }] });

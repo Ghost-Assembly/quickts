@@ -1,10 +1,8 @@
 // How tall the menu is allowed to be.
 //
-// The extension QuickTS replaces sets `menu.box.height = 200` and overwrites
-// PopupSubMenu's private _needsScrollbar with a function returning true. Both
-// are wrong. 200 pixels is meaningless at 200% scale or 125% text scaling, and
-// forcing the scrollbar on draws one for a three-node tailnet that needs none.
-// That is upstream issue #11, its longest thread.
+// Not a fixed height, and not a forced scrollbar. A hardcoded 200 pixels is
+// meaningless at 200% scale or 125% text scaling, and a scrollbar forced on
+// draws one for a three-node tailnet that needs none.
 //
 // The Shell already implements this. js/ui/popupMenu.js says so in as many
 // words — "the scrollbar will only take effect if a CSS max-height is set on

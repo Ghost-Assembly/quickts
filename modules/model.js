@@ -1,17 +1,15 @@
 // Everything QuickTS knows, and everything it can be asked to do.
 //
-// Deliberately NOT a GObject. That is the single largest departure from the
-// extension QuickTS replaces, and it retires two classes of defect outright:
+// Deliberately NOT a GObject, which retires two classes of defect outright:
 //
 //   There are no GObject properties, so there are no notify:: connections and
 //   no bind_property bindings for the menu to leak. There is one subscribe()
 //   per widget, each returning its own disposer, and modules/panel.js drains
-//   them in a flat array. Upstream connects a dozen handlers and binds two
-//   properties and disconnects none of them.
+//   them in a flat array.
 //
 //   Subscribers receive a whole consistent snapshot plus a list of what moved,
-//   so there is no per-property emission order to get wrong. Upstream emits
-//   notify::exit-node before computing the name that depends on it.
+//   so there is no per-property emission order to get wrong — no handler can
+//   read a name before the id it depends on has been applied.
 //
 // It also means the whole thing runs under Vitest with no stubs at all: the
 // client and the clock are injected, and neither has a GNOME type in it.
@@ -20,7 +18,7 @@
 
 import { NOTHING_DIRTY, dirtyFrom, isDirty, mergeDirty, parseBusLine } from './bus.js';
 import { isCanceled } from './cancel.js';
-import { messageFor, reasonOf } from './errors.js';
+import { REASON, messageFor, reasonOf } from './errors.js';
 import {
     currentProfileRequest,
     filePutRequest,
@@ -47,10 +45,11 @@ import {
     changed,
     initialState,
 } from './state.js';
+import { isUp } from './health.js';
 import { displayName } from './peers.js';
 import { PING_TYPE, describePing } from './ping.js';
 import { withExitNode } from './routes.js';
-import { waitingFiles } from './inbox.js';
+import { isSafeFileName, waitingFiles } from './inbox.js';
 import { fileNameOf } from './taildrop.js';
 import { backoffDelay, flushDelay } from './timing.js';
 
@@ -122,17 +121,25 @@ export class TailscaleModel {
      * sets a flag; the full peer read happens when the menu opens, which is
      * the only moment the answer is on screen.
      *
+     * A list older than PEERS_STALE_MS is re-read on opening whether or not a
+     * flag was set. The bus can only report what it saw, and a reconnect, a
+     * suspend or a daemon that went quiet all leave a list nothing announced
+     * as changed but that no longer matches the tailnet.
+     *
      * @param {boolean} open Whether the menu is open.
      */
     setMenuOpen(open) {
         this.#menuOpen = Boolean(open);
+        if (!open) return;
 
-        // Peers only. The flag is set for a deferred peer read and nothing
-        // else; #read already re-reads preferences whenever the bus says they
-        // changed, so asking for them again here is a round trip whose answer
-        // is known to be current.
-        if (open && this.#peersPending)
-            void this.refresh({ peers: true, prefs: false });
+        const stale = this.#now() - this.#peersReadAt > PEERS_STALE_MS;
+
+        // Peers, and profiles with them when stale. Not preferences: #read
+        // already re-reads those whenever the bus says they changed, so
+        // asking again here is a round trip whose answer is known to be
+        // current.
+        if (this.#peersPending || stale)
+            void this.refresh({ peers: true, prefs: false, profiles: stale });
     }
 
     /** Read everything, then follow the bus until the token is canceled. */
@@ -262,15 +269,21 @@ export class TailscaleModel {
     /**
      * Files that have been sent here and are waiting.
      *
+     * Not asked while the tailnet is down, and a failure is not routed
+     * through #fail: Taildrop being unavailable is a fact about Taildrop, and
+     * reporting it as the daemon being unreachable would put "the daemon
+     * refused the request" over a menu that is otherwise working.
+     *
      * @returns {Promise<Array<{name: string, size: number}>>} What is waiting.
      */
     async waitingFiles() {
-        if (this.#disposed) return [];
+        if (this.#disposed || !isUp(this.#state)) return [];
 
         try {
             return waitingFiles(await this.#request(waitingFilesRequest()));
         } catch (error) {
-            if (!isCanceled(error)) this.#fail(error);
+            if (!isCanceled(error))
+                console.debug(`[quickts] could not list waiting files: ${error}`);
             return [];
         }
     }
@@ -285,6 +298,11 @@ export class TailscaleModel {
      */
     async saveFile(name) {
         if (this.#disposed) return { path: '', error: '' };
+
+        // The daemon listed a name that cannot be a plain file here. It is
+        // left on the daemon, where `tailscale file get` can still reach it.
+        if (!isSafeFileName(name))
+            return { path: '', error: messageFor(REASON.PROTOCOL) };
 
         try {
             const path = await this.#client.saveFile(getFileRequest(name), name);
@@ -332,15 +350,24 @@ export class TailscaleModel {
         }
     }
 
-    /** @returns {Promise<object[]>} Peers eligible to receive a file right now. */
+    /**
+     * Peers eligible to receive a file right now.
+     *
+     * tailscaled answers 500 unless the backend is Running, and on a tailnet
+     * with Taildrop turned off, so this is skipped while the tailnet is down
+     * and a failure is not routed through #fail — see waitingFiles().
+     *
+     * @returns {Promise<object[]>} The daemon's file targets.
+     */
     async fileTargets() {
-        if (this.#disposed) return [];
+        if (this.#disposed || !isUp(this.#state)) return [];
 
         try {
             const targets = await this.#request(fileTargetsRequest());
             return Array.isArray(targets) ? targets : [];
         } catch (error) {
-            this.#fail(error);
+            if (!isCanceled(error))
+                console.debug(`[quickts] could not list file targets: ${error}`);
             return [];
         }
     }
@@ -480,6 +507,13 @@ export class TailscaleModel {
             connect: () => this.#client.stream(watchBusRequest()),
             onEvent: line => this.#onBusLine(line),
             onError: error => this.#fail(error),
+            // A resumed stream follows a gap the bus will never describe:
+            // its first message carries only State, and everything that moved
+            // while it was down — preferences, profiles, peers — is simply
+            // not announced. So it is read, once, rather than waited for.
+            onOpen: resumed => {
+                if (resumed) void this.refresh({ peers: true, profiles: true });
+            },
             delay: ms => this.#scheduler.delay(ms),
             backoff: attempt => backoffDelay(attempt),
         });
@@ -553,8 +587,11 @@ export class TailscaleModel {
      *
      * The peer map is the expensive part of a status read, and on a large
      * tailnet it is most of the payload. It is fetched when someone is looking
-     * at it, when it has gone stale, or when the exit node moved — because the
-     * subtitle names the exit node and cannot resolve a peer it has not read.
+     * at it or when it has gone stale.
+     *
+     * The profile list rides on a preferences change. A profile switched from
+     * a terminal is announced as new preferences and nothing else, so this is
+     * the only signal that the menu's tick has moved.
      *
      * @param {object} dirty Accumulated flags from modules/bus.js.
      * @returns {Promise<void>} Done.
@@ -572,6 +609,7 @@ export class TailscaleModel {
             prefs: dirty.prefs,
             status: dirty.state || dirty.health || dirty.peers,
             peers: wantPeers,
+            profiles: dirty.prefs,
         });
     }
 

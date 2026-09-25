@@ -17,8 +17,7 @@ export const HOST = 'local-tailscaled.sock';
  * Where tailscaled listens, most-preferred first.
  *
  * /run and /var/run are the same directory on any systemd distribution, but
- * they are not on every distribution QuickTS might be installed on, and the
- * extension it replaces hardcoded only the /var/run spelling.
+ * they are not on every distribution QuickTS might be installed on.
  */
 export const SOCKET_PATHS = Object.freeze([
     '/run/tailscale/tailscaled.sock',
@@ -93,9 +92,9 @@ export function prefsRequest() {
  * preference would read as its zero value and be reset.
  *
  * The capital S matters. Go's encoding/json matches field names
- * case-insensitively, so the lowercase `<Name>set` the previous extension sent
- * happened to work; encoding/json/v2, which tailscale is already part-way into
- * adopting, does not. Spelling the field the way ipn/prefs.go spells it costs
+ * case-insensitively, so a lowercase `<Name>set` happens to work;
+ * encoding/json/v2, which tailscale is already part-way into adopting, does
+ * not. Spelling the field the way ipn/prefs.go spells it costs
  * nothing and does not depend on that.
  *
  * @param {Record<string, unknown>} changes Preference names to new values.
@@ -120,10 +119,9 @@ export function profilesRequest() {
 /**
  * The profile currently in use.
  *
- * The previous extension had no equivalent and inferred the active profile by
- * comparing the live prefs' ControlURL and Config.UserProfile.ID against each
- * profile's — an expression that throws whenever a profile has no
- * NetworkProfile, which is upstream issue #42.
+ * Asked rather than inferred. Inferring the active profile means comparing
+ * the live prefs' ControlURL and Config.UserProfile.ID against each profile's,
+ * which throws whenever a profile has no NetworkProfile.
  *
  * @returns {{method: string, path: string}} Request descriptor.
  */
@@ -244,8 +242,10 @@ export function suggestExitNodeRequest() {
 export const NOTIFY = Object.freeze({
     /** First message, sent at once, carries State and BrowseToURL. */
     INITIAL_STATE: 1 << 1,
-    /** Let the daemon coalesce bursts of netmap updates before sending them. */
-    RATE_LIMIT: 1 << 8,
+    /** Announce peers added, replaced or removed, as PeersChanged and PeersRemoved. */
+    PEER_CHANGES: 1 << 12,
+    /** Narrow per-field peer patches, as PeerChangedPatch. Not subscribed to. */
+    PEER_PATCHES: 1 << 15,
 });
 
 /**
@@ -256,13 +256,18 @@ export const NOTIFY = Object.freeze({
  * one still waiting on a dead socket, and it carries BrowseToURL, which is how
  * an interactive login hands over its URL.
  *
- * RATE_LIMIT lets tailscaled do the first round of coalescing itself. It is
- * complementary to flushDelay in modules/timing.js, not a replacement: the
- * daemon throttles what it sends, and QuickTS still batches what it receives.
- * It is rejected in combination with the delta-stream bits, none of which
- * QuickTS uses.
+ * PEER_CHANGES is what makes the peer list refresh at all on Linux. Since
+ * Tailscale 1.100 only a Windows tailscaled sends NetMap after the first
+ * message, so without it a peer coming online is never announced. QuickTS
+ * reads none of what the delta carries — see modules/bus.js — only that it
+ * arrived. PEER_PATCHES is left off: without it the daemon promotes each patch
+ * into PeersChanged, and one field to watch is simpler than two.
+ *
+ * NotifyRateLimit (1 << 8) is deliberately absent. ipn.ValidateNotifyWatchOpt
+ * rejects it alongside PEER_CHANGES with a 400, which would lose the whole
+ * stream; flushDelay in modules/timing.js does the coalescing instead.
  */
-export const WATCH_MASK = NOTIFY.INITIAL_STATE | NOTIFY.RATE_LIMIT;
+export const WATCH_MASK = NOTIFY.INITIAL_STATE | NOTIFY.PEER_CHANGES;
 
 /**
  * Ask the daemon to ping a peer.

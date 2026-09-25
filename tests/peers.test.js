@@ -67,11 +67,24 @@ describe('isMullvad', () => {
         expect(isMullvad(rawPeer({ Tags: [MULLVAD_TAG] }))).toBe(true);
     });
 
-    // Tags is omitted entirely for an untagged peer, and this could not be
-    // checked against a tailnet with Mullvad enabled, so either signal alone
-    // is taken as enough rather than requiring both.
-    it('recognizes a peer that only carries a location', () => {
-        expect(isMullvad(rawPeer({ Location: { CountryCode: 'se' } }))).toBe(true);
+    // The signal Tailscale's own CLI uses: cmd/tailscale/cli/status.go hides
+    // exit nodes whose DNSName ends in mullvad.ts.net as Mullvad's.
+    it.each([
+        ['with the trailing dot', 'se-sto-wg-001.mullvad.ts.net.'],
+        ['without it', 'se-sto-wg-001.mullvad.ts.net'],
+    ])('recognizes a name under mullvad.ts.net %s', (_reason, DNSName) => {
+        expect(isMullvad(rawPeer({ DNSName }))).toBe(true);
+    });
+
+    // tailcfg.Location is "only set if explicitly declared by a node", and
+    // any node may declare one. Treating a location as proof pulled an
+    // ordinary exit node out of the list and into a country group.
+    it('does not take a location alone as Mullvad', () => {
+        expect(isMullvad(rawPeer({ Location: { CountryCode: 'SE' } }))).toBe(false);
+    });
+
+    it('does not match a tailnet merely named like it', () => {
+        expect(isMullvad(rawPeer({ DNSName: 'box.notmullvad.ts.net.' }))).toBe(false);
     });
 
     it('does not treat an ordinary peer as Mullvad', () => {
@@ -116,7 +129,6 @@ describe('normalizePeer', () => {
         expect(node).toMatchObject({
             id: 'nSOMEID1CNTRL',
             name: 'laptop',
-            hostName: 'laptop',
             os: 'linux',
             online: true,
             isExitNode: false,

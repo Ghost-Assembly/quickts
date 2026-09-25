@@ -4,17 +4,16 @@
 // changed. /status and /prefs tell us *what* it is. No value is ever read out
 // of a notification and shown to the user.
 //
-// That is not fastidiousness. The extension QuickTS replaces translates the
-// bus's NetMap peers into its own shape and renders them, and that shape
-// disagrees with the one /status returns for the same peers:
+// That is not fastidiousness. A bus peer is a tailcfg.Node, not the
+// ipnstate.PeerStatus /status returns, and translating one into the menu's
+// shape disagrees with /status for the same peers:
 //
 //   Tags            absent from a NetMap peer, so every Mullvad exit node
 //                   disappears the moment the first bus update arrives
-//                   (upstream issue #35)
-//   ExitNodeOption  re-derived by sniffing AllowedIPs for 0.0.0.0/0 rather
-//                   than read, so it disagrees with the daemon's own answer
-//   Online          means something different in each payload, which is where
-//                   the empty rows in upstream issue #28 come from
+//   ExitNodeOption  has to be re-derived by sniffing AllowedIPs for
+//                   0.0.0.0/0, and then disagrees with the daemon's answer
+//   Online          means something different in each payload, which is how
+//                   a menu ends up with empty rows
 //
 // Two translations of one dataset cannot be kept in agreement, so this file
 // offers no way to get a peer out of a notification. There is nothing to
@@ -83,7 +82,21 @@ export function dirtyFrom(notify) {
         // The netmap moved: a peer appeared, went offline, or changed name.
         // Read the full /status, but only when someone is looking — see the
         // refresh policy in modules/model.js.
-        peers: carries(notify?.NetMap),
+        //
+        // NetMap alone is not enough. Since Tailscale 1.100 a runtime NetMap
+        // is sent only on Windows (ipn/ipnlocal/bus.go,
+        // goosGetsLegacyNetmapNotify), so on Linux the netmap moving is
+        // announced by SelfChange, which accompanies every new netmap, and by
+        // the peer delta fields NOTIFY.PEER_CHANGES subscribes to. Without
+        // NOTIFY.PEER_PATCHES the daemon promotes every PeerChangedPatch into
+        // PeersChanged, so the patch field is listed only so a future mask
+        // cannot silently lose it.
+        peers:
+            carries(notify?.NetMap) ||
+            carries(notify?.SelfChange) ||
+            carries(notify?.PeersChanged) ||
+            carries(notify?.PeersRemoved) ||
+            carries(notify?.PeerChangedPatch),
 
         // Backend state, a finished login, or a URL to visit. Any of these
         // changes what the toggle says, so read the cheap /status.
@@ -92,8 +105,9 @@ export function dirtyFrom(notify) {
             carries(notify?.LoginFinished) ||
             carries(notify?.BrowseToURL),
 
-        // The daemon reported a problem. /status carries the full Health list.
-        health: carries(notify?.ErrMessage),
+        // The daemon reported a problem, or its health changed in either
+        // direction. /status carries the full Health list.
+        health: carries(notify?.Health) || carries(notify?.ErrMessage),
     };
 }
 

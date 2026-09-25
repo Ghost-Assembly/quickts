@@ -152,13 +152,18 @@ const ShortcutRow = GObject.registerClass(
  * possible at all because modules/io.js imports Gio, GLib and Soup and nothing
  * from resource:/// — so the preferences process, which has no access to the
  * Shell's modules, can still use it.
+ *
+ * Feedback goes to a toast on the window. Adw.EntryRow has no subtitle — its
+ * only text properties are the title and the entry itself — so a message
+ * assigned to one is set on nothing and never seen.
  */
 const RoutesRow = GObject.registerClass(
     class QuickTSRoutesRow extends Adw.EntryRow {
         /**
          * @param {object} io The transport, from createIo.
+         * @param {(message: string) => void} say Shows a message to the user.
          */
-        _init(io) {
+        _init(io, say) {
             super._init({
                 title: _('Advertised subnets'),
                 // Applied on Enter or on the apply button, not on every
@@ -167,7 +172,7 @@ const RoutesRow = GObject.registerClass(
             });
 
             this._io = io;
-            this._prefs = null;
+            this._say = say;
 
             this.connect('apply', () => void this._apply());
             void this._load();
@@ -176,12 +181,11 @@ const RoutesRow = GObject.registerClass(
         /** Read the current routes off the daemon. */
         async _load() {
             try {
-                this._prefs = await this._io.client.request(prefsRequest());
-                this.text = subnetRoutes(this._prefs.AdvertiseRoutes).join(', ');
-                this.subtitle = _('Comma separated, for example 192.168.1.0/24');
+                const prefs = await this._io.client.request(prefsRequest());
+                this.text = subnetRoutes(prefs.AdvertiseRoutes).join(', ');
             } catch (error) {
                 this.sensitive = false;
-                this.subtitle = _(messageFor(reasonOf(error)));
+                this._say(_(messageFor(reasonOf(error))));
                 console.warn(`[quickts] could not read routes: ${error}`);
             }
         }
@@ -194,14 +198,14 @@ const RoutesRow = GObject.registerClass(
                 // Reported rather than dropped: silently discarding a typo
                 // would leave someone believing a subnet is advertised.
                 this.add_css_class('error');
-                this.subtitle = _('Not a subnet: %s').replace('%s', invalid.join(', '));
+                this._say(_('Not a subnet: %s').replace('%s', invalid.join(', ')));
                 return;
             }
 
             this.remove_css_class('error');
 
             try {
-                // Read again rather than trusting the copy from load: the
+                // Read first rather than trusting what was loaded: the
                 // exit-node setting lives in the same list and may have been
                 // toggled from the menu since.
                 const current = await this._io.client.request(prefsRequest());
@@ -210,9 +214,9 @@ const RoutesRow = GObject.registerClass(
                         AdvertiseRoutes: withSubnets(current.AdvertiseRoutes, routes),
                     }),
                 );
-                this.subtitle = _('Comma separated, for example 192.168.1.0/24');
+                this._say(_('Advertised subnets updated'));
             } catch (error) {
-                this.subtitle = _(messageFor(reasonOf(error)));
+                this._say(_(messageFor(reasonOf(error))));
                 console.warn(`[quickts] could not set routes: ${error}`);
             }
         }
@@ -264,8 +268,9 @@ export default class QuickTSPreferences extends ExtensionPreferences {
         const routing = new Adw.PreferencesGroup({
             title: _('Routing'),
             description: _(
-                'Subnets this machine offers to route for. Running as an exit ' +
-                    'node is toggled from the menu.',
+                'Subnets this machine offers to route for, comma separated — ' +
+                    'for example 192.168.1.0/24. Running as an exit node is ' +
+                    'toggled from the menu.',
             ),
         });
 
@@ -279,7 +284,12 @@ export default class QuickTSPreferences extends ExtensionPreferences {
             return false;
         });
 
-        routing.add(new RoutesRow(io));
+        // use_markup off: the message can carry what was typed, and a stray
+        // angle bracket in markup is a parse error rather than text.
+        const say = message =>
+            window.add_toast(new Adw.Toast({ title: message, use_markup: false }));
+
+        routing.add(new RoutesRow(io, say));
         page.add(routing);
 
         const shortcut = new Adw.PreferencesGroup({ title: _('Keyboard shortcut') });

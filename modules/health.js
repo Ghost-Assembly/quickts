@@ -4,9 +4,8 @@
 // human-readable warnings — "Some peers are advertising routes but
 // --accept-routes is false", "SELinux is enabled; Tailscale SSH may not work"
 // — and a BackendState that says whether the daemon is running, starting or
-// waiting to be logged in. The extension QuickTS replaces reads neither, which
-// is why its toggle can sit there showing "on" while the backend waits for a
-// login that nothing in the menu offers.
+// waiting to be logged in. Reading neither is how a toggle sits there showing
+// "on" while the backend waits for a login that nothing in the menu offers.
 //
 // Nothing here is translated, for the same reason nothing here imports: this
 // file has to be loadable from Vitest. It returns a kind and a value, and
@@ -31,6 +30,8 @@ export const SUMMARY = Object.freeze({
     IN_USE: 'in-use',
     /** Coming up. */
     STARTING: 'starting',
+    /** Logged in, and waiting for a tailnet admin to approve this machine. */
+    NEEDS_APPROVAL: 'needs-approval',
     /** Deliberately down. */
     OFF: 'off',
     /** Routing through a peer. `value` is the node name. */
@@ -41,19 +42,11 @@ export const SUMMARY = Object.freeze({
     CONNECTED: 'connected',
 });
 
-/** How loudly to say it. */
-export const SEVERITY = Object.freeze({
-    OK: 'ok',
-    WARNING: 'warning',
-    ERROR: 'error',
-});
-
 /**
  * Whether the daemon is waiting for someone to log in.
  *
- * This is the state upstream cannot represent, because it reads only
- * WantRunning from the preferences. WantRunning stays true across a logout, so
- * its toggle shows "on" against a backend that is doing nothing.
+ * WantRunning alone cannot represent this: it stays true across a logout, so
+ * a toggle driven by it shows "on" against a backend that is doing nothing.
  *
  * @param {object} state A snapshot.
  * @returns {boolean} True if an interactive login would help.
@@ -74,6 +67,28 @@ export function needsLogin(state) {
  */
 export function isUp(state) {
     return state.running && state.backendState === BACKEND.RUNNING;
+}
+
+/**
+ * Whether the tile should show as on.
+ *
+ * Not the same question as isUp. A tile is on when clicking it would turn the
+ * tailnet off: the preference says to run and the daemon is reachable and
+ * working towards it — which includes Starting and NeedsMachineAuth, where
+ * nothing is up yet but the only useful click is "stop". A backend waiting
+ * for a login is off whatever the preference says, because WantRunning stays
+ * true across a logout and a click there starts the login instead.
+ *
+ * @param {object} state A snapshot.
+ * @returns {boolean} True if the tile should be checked.
+ */
+export function isOn(state) {
+    return (
+        state.reachable &&
+        state.running &&
+        !needsLogin(state) &&
+        state.backendState !== BACKEND.IN_USE_OTHER_USER
+    );
 }
 
 /**
@@ -115,6 +130,10 @@ export function summaryOf(state) {
         return { kind: SUMMARY.IN_USE, value: '' };
     if (state.backendState === BACKEND.STARTING)
         return { kind: SUMMARY.STARTING, value: '' };
+    // Before the OFF test below, which it would otherwise fall into: the
+    // backend is not Running, and "Off" is the one thing it is not.
+    if (state.running && state.backendState === BACKEND.NEEDS_MACHINE_AUTH)
+        return { kind: SUMMARY.NEEDS_APPROVAL, value: '' };
 
     if (!isUp(state)) return { kind: SUMMARY.OFF, value: '' };
 
@@ -132,27 +151,11 @@ export function summaryOf(state) {
 }
 
 /**
- * How serious the current state is.
- *
- * @param {object} state A snapshot.
- * @returns {string} One of {@link SEVERITY}.
- */
-export function severityOf(state) {
-    if (!state.reachable) return SEVERITY.ERROR;
-    if (needsLogin(state) || state.backendState === BACKEND.IN_USE_OTHER_USER)
-        return SEVERITY.WARNING;
-    if (isUp(state) && healthLines(state).lines.length > 0) return SEVERITY.WARNING;
-
-    return SEVERITY.OK;
-}
-
-/**
  * The message for an unreachable daemon, and whether it is worth a row of its own.
  *
  * A permission failure is the one worth interrupting for: tailscaled answers
- * 403 to anyone who is not the tailscale operator, and one command fixes it.
- * Upstream logs that to the journal and draws an empty menu, so the fix is
- * discoverable only by reading its source.
+ * 403 to anyone who is not the tailscale operator, and one command fixes it —
+ * a command nobody would otherwise discover from an empty menu.
  *
  * @param {object} state A snapshot.
  * @returns {{message: string, command: string, actionable: boolean}|null} What

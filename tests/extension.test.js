@@ -141,7 +141,7 @@ describe('QuickTSExtension', () => {
         await settle();
         extension.disable();
 
-        expect(Main.removeCalls).toEqual(['open-menu']);
+        expect(Main.removeCalls).toEqual(['quickts-open-menu']);
     });
 
     // The shape scripts/headless-check.sh exercises against a real Shell.
@@ -154,7 +154,7 @@ describe('QuickTSExtension', () => {
         extension.enable();
         await settle();
 
-        expect(Main.addCalls).toEqual(['open-menu', 'open-menu']);
+        expect(Main.addCalls).toEqual(['quickts-open-menu', 'quickts-open-menu']);
         expect(Main.externalIndicators).toHaveLength(2);
 
         extension.disable();

@@ -3,13 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { REASON } from '../modules/errors.js';
 import {
     MAX_HEALTH_LINES,
-    SEVERITY,
     SUMMARY,
     healthLines,
+    isOn,
     isUp,
     needsLogin,
     problemOf,
-    severityOf,
     summaryOf,
 } from '../modules/health.js';
 import { BACKEND, initialState } from '../modules/state.js';
@@ -124,6 +123,17 @@ describe('summaryOf', () => {
             { running: false, backendState: BACKEND.STOPPED },
             SUMMARY.OFF,
         ],
+        // Not "Off": it is on, and waiting for a tailnet admin.
+        [
+            'waiting for approval',
+            { backendState: BACKEND.NEEDS_MACHINE_AUTH },
+            SUMMARY.NEEDS_APPROVAL,
+        ],
+        [
+            'turned off while waiting for approval',
+            { running: false, backendState: BACKEND.NEEDS_MACHINE_AUTH },
+            SUMMARY.OFF,
+        ],
     ])('reports %s', (_reason, overrides, kind) => {
         expect(summaryOf(up(overrides)).kind).toBe(kind);
     });
@@ -169,20 +179,19 @@ describe('summaryOf', () => {
     });
 });
 
-describe('severityOf', () => {
+describe('isOn', () => {
+    // On means a click would turn it off, which is true well before it is up.
     it.each([
-        ['an unreachable daemon', { reachable: false }, SEVERITY.ERROR],
-        ['a needed login', { backendState: BACKEND.NEEDS_LOGIN }, SEVERITY.WARNING],
-        ['warnings while up', { health: ['a'] }, SEVERITY.WARNING],
-        ['a healthy tailnet', {}, SEVERITY.OK],
-        ['being deliberately off', { running: false }, SEVERITY.OK],
-    ])('rates %s', (_reason, overrides, severity) => {
-        expect(severityOf(up(overrides))).toBe(severity);
-    });
-
-    // Warnings about a tailnet that is down are noise, not a problem.
-    it('does not warn about health while the tailnet is off', () => {
-        expect(severityOf(up({ running: false, health: ['a'] }))).toBe(SEVERITY.OK);
+        ['up', {}, true],
+        ['starting', { backendState: BACKEND.STARTING }, true],
+        ['waiting for approval', { backendState: BACKEND.NEEDS_MACHINE_AUTH }, true],
+        ['deliberately off', { running: false, backendState: BACKEND.STOPPED }, false],
+        // WantRunning survives a logout; the click starts a login instead.
+        ['waiting for a login', { backendState: BACKEND.NEEDS_LOGIN }, false],
+        ['in use by another user', { backendState: BACKEND.IN_USE_OTHER_USER }, false],
+        ['unreachable', { reachable: false }, false],
+    ])('is %s: %s', (_reason, overrides, expected) => {
+        expect(isOn(up(overrides))).toBe(expected);
     });
 });
 
