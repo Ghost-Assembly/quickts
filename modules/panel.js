@@ -1,8 +1,10 @@
 // The actor tree: the quick settings tile, its menu, and the keybinding.
 //
-// This is the one file that touches St, Clutter and the Shell's own modules,
-// and it deliberately holds no decisions. What to show comes from
-// modules/health.js, how to group it from modules/peers.js and
+// This file and the section modules it builds — exit-node-section.js,
+// device-section.js and taildrop-section.js, with menu-items.js and
+// navigable-section.js beneath them — are the ones that touch St and the
+// Shell's own modules, and they deliberately hold no decisions. What to show
+// comes from modules/health.js, how to group it from modules/peers.js and
 // modules/mullvad.js, how tall to make it from modules/layout.js. What is left
 // here is construction and teardown.
 //
@@ -34,20 +36,17 @@ import {
 import { maxHeightStyle, menuMaxHeight } from './layout.js';
 import { KEYS, SHORTCUT_KEYS } from './settings.js';
 import { advertisesExitNode } from './routes.js';
-import { hasEligibleTarget, isListedTarget, sendTargets } from './taildrop.js';
-import { formatSize } from './inbox.js';
 import {
-    ActionMenuItem,
     StayOpenSwitchMenuItem,
     addDisabledRow,
     addRow,
     copyText,
     openUri,
-    showOsd,
     warningRow,
 } from './menu-items.js';
 import { ExitNodeSection } from './exit-node-section.js';
 import { DeviceSection } from './device-section.js';
+import { InboxSection, SendSection } from './taildrop-section.js';
 
 /** The tile's own icon, next to the clock. */
 const QuickTSIndicator = GObject.registerClass(
@@ -96,26 +95,12 @@ const QuickTSToggle = GObject.registerClass(
             this._gicon = gicon;
             this._model = model;
             this._settings = settings;
-            this._chooseFiles = chooseFiles;
 
             // Set only when the user asks to log in. The auth URL is present
             // in the state whenever the daemon is waiting for one, and opening
             // a browser because of that alone would hijack the session of
             // anyone who happens to be logged out.
             this._loginRequested = false;
-
-            // One counter per section, bumped whenever that section is
-            // rebuilt. An async handler captures its section's counter and
-            // compares before touching a row, because the row it was given
-            // may since have been destroyed by removeAll(). Per section, not
-            // shared: a netmap blink rebuilding the devices has no business
-            // discarding a Taildrop listing or leaving a save reading
-            // "Saving…" after it finished.
-            //
-            // (`row.destroyed` is not a substitute. ClutterActor installs no
-            // such property, so a guard reading it is always false.)
-            this._taildropGeneration = 0;
-            this._inboxGeneration = 0;
 
             // A one-shot re-measure of the menu height; see
             // _remeasureOnceLaidOut().
@@ -158,26 +143,31 @@ const QuickTSToggle = GObject.registerClass(
             this._warnings.visible = false;
             this.menu.addMenuItem(this._warnings);
 
+            // The sections with rows of their own live in their own modules.
+            // Each keeps one generation counter, bumped whenever that
+            // section is rebuilt. An async handler captures its section's
+            // counter and compares before touching a row, because the row it
+            // was given may since have been destroyed by removeAll(). Per
+            // section, not shared: a netmap blink rebuilding the devices has
+            // no business discarding a Taildrop listing or leaving a save
+            // reading "Saving…" after it finished.
+            //
+            // (`row.destroyed` is not a substitute. ClutterActor installs no
+            // such property, so a guard reading it is always false.)
             this._exitNodeSection = new ExitNodeSection(this.menu, this._deps);
             this._exitNode = this._exitNodeSection.item;
 
             this._deviceSection = new DeviceSection(this.menu, {
                 ...this._deps,
-                sendFiles: node => this._sendFiles(node),
+                sendFiles: node => this._sendSection.send(node),
             });
             this._devices = this._deviceSection.item;
 
-            this._taildrop = new PopupMenu.PopupSubMenuMenuItem(_('Send files'), true);
-            this._taildrop.visible = false;
-            this.menu.addMenuItem(this._taildrop);
+            this._sendSection = new SendSection(this.menu, this._deps);
+            this._taildrop = this._sendSection.item;
 
-            // Taildrop's other half. The daemon holds an incoming file until
-            // something asks for it, so without this the extension can send
-            // files and is blind to the ones arriving.
-            this._inbox = new PopupMenu.PopupSubMenuMenuItem(_('Received files'), true);
-            this._inbox.icon.icon_name = 'document-save-symbolic';
-            this._inbox.visible = false;
-            this.menu.addMenuItem(this._inbox);
+            this._inboxSection = new InboxSection(this.menu, this._deps);
+            this._inbox = this._inboxSection.item;
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -381,180 +371,6 @@ const QuickTSToggle = GObject.registerClass(
                 );
         }
 
-        /**
-         * Rebuild the Taildrop list.
-         *
-         * The eligible targets come from the daemon rather than from the peer
-         * list, so this needs a request; it is issued when the menu opens
-         * rather than on every state change, because nobody can act on a list
-         * they cannot see and asking on each netmap update would be a request
-         * per peer that blinks.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncTaildrop() {
-            const { _ } = this._i18n;
-
-            const generation = ++this._taildropGeneration;
-            const targets = sendTargets(
-                this._model.state.nodes,
-                await this._model.fileTargets(),
-            );
-
-            // A later listing, or a disable, has overtaken this one while the
-            // request was in flight.
-            if (generation !== this._taildropGeneration) return;
-
-            this._taildrop.menu.removeAll();
-            this._taildrop.visible = hasEligibleTarget(targets);
-            if (!this._taildrop.visible) return;
-
-            for (const { node, eligible, reason } of targets) {
-                const item = new PopupMenu.PopupImageMenuItem(
-                    eligible ? node.name : `${node.name} — ${_(reason)}`,
-                    node.icon,
-                );
-
-                if (!eligible) {
-                    item.setSensitive(false);
-                } else {
-                    item.connectObject(
-                        'activate',
-                        () => void this._sendFiles(node),
-                        this,
-                    );
-                }
-
-                this._taildrop.menu.addMenuItem(item);
-            }
-        }
-
-        /**
-         * List the files waiting to be saved.
-         *
-         * Fetched when the menu opens rather than on every state change: the
-         * daemon holds them either way, and a request per netmap blink would
-         * be noise.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncInbox() {
-            const { _n } = this._i18n;
-
-            const generation = ++this._inboxGeneration;
-            const files = await this._model.waitingFiles();
-            if (generation !== this._inboxGeneration) return;
-
-            this._inbox.menu.removeAll();
-            this._inbox.visible = files.length > 0;
-            if (!this._inbox.visible) return;
-
-            this._inbox.label.text = _n(
-                '%d received file',
-                '%d received files',
-                files.length,
-            ).replace('%d', String(files.length));
-
-            for (const file of files)
-                this._inbox.menu.addMenuItem(
-                    new ActionMenuItem(
-                        `${file.name}  ·  ${formatSize(file.size)}`,
-                        'document-save-symbolic',
-                        row => void this._saveFile(file, row),
-                    ),
-                );
-        }
-
-        /**
-         * Save one waiting file, reporting on its own row.
-         *
-         * Stays open, like Ping: the answer is a path, and a path is worth
-         * reading rather than flashing past in an OSD.
-         *
-         * @param {object} file A waiting file.
-         * @param {object} row The row that was activated.
-         * @returns {Promise<void>} Done.
-         */
-        async _saveFile(file, row) {
-            const { _ } = this._i18n;
-
-            const generation = this._inboxGeneration;
-            row.label.text = _('Saving %s…').replace('%s', file.name);
-            row.setSensitive(false);
-
-            const { path, error } = await this._model.saveFile(file.name);
-            if (generation !== this._inboxGeneration) return;
-
-            if (error) {
-                row.setSensitive(true);
-                row.label.text = _(error);
-                return;
-            }
-
-            row.label.text = _('Saved to %s').replace('%s', path);
-            showOsd(this._gicon, _('Saved %s').replace('%s', file.name));
-        }
-
-        /**
-         * Choose files and send them.
-         *
-         * @param {object} node The node to send to.
-         * @returns {Promise<void>} Done.
-         */
-        async _sendFiles(node) {
-            const { _, _n } = this._i18n;
-
-            // Only to a peer the daemon itself names as a target, whichever
-            // row started this. A peer's own TaildropTarget can say available
-            // while the daemon, which decides, does not list it — and asking
-            // first means nobody picks files for a send that cannot happen.
-            if (!isListedTarget(await this._model.fileTargets(), node.id)) {
-                Main.notify(
-                    _('Cannot send to %s').replace('%s', node.name),
-                    _('Tailscale does not list it as able to receive files right now.'),
-                );
-                return;
-            }
-
-            let uris;
-            try {
-                uris = await this._chooseFiles({
-                    title: _('Send to %s').replace('%s', node.name),
-                });
-            } catch (error) {
-                // The portal rejects when xdg-desktop-portal is not installed
-                // or not running. Unhandled, this was an unhandled rejection
-                // and a click that did nothing and said nothing.
-                console.warn(`[quickts] could not open a file chooser: ${error}`);
-                Main.notifyError(
-                    _('Could not open a file chooser'),
-                    _('The desktop portal is not available.'),
-                );
-                return;
-            }
-
-            if (!uris || uris.length === 0) return;
-
-            const { sent, failed } = await this._model.sendFiles(node.id, uris);
-
-            if (sent > 0)
-                showOsd(
-                    this._gicon,
-                    _n('Sent %d file to %s', 'Sent %d files to %s', sent)
-                        .replace('%d', String(sent))
-                        .replace('%s', node.name),
-                );
-
-            // Main.notify, not Main.notifyError: notifyError also copies its
-            // text to the journal, and a node name and file names are
-            // exactly what SECURITY.md promises stay out of it.
-            if (failed.length > 0)
-                Main.notify(
-                    _('Could not send to %s').replace('%s', node.name),
-                    failed.join(', '),
-                );
-        }
-
         /** @param {object} state A snapshot. */
         _syncOptions(state) {
             for (const { read, item } of this._switches)
@@ -638,8 +454,8 @@ const QuickTSToggle = GObject.registerClass(
 
             this._applyMaxHeight();
             this._remeasureOnceLaidOut();
-            void this._syncTaildrop();
-            void this._syncInbox();
+            void this._sendSection.menuOpened(this._model.state);
+            void this._inboxSection.menuOpened(this._model.state);
             void this._exitNodeSection.menuOpened(this._model.state);
         }
 
@@ -716,8 +532,8 @@ const QuickTSToggle = GObject.registerClass(
             // Invalidates any async handler still waiting — a ping, a Taildrop
             // listing — so it cannot write into the rows about to be torn down.
             this._deviceSection.destroy();
-            this._taildropGeneration += 1;
-            this._inboxGeneration += 1;
+            this._sendSection.destroy();
+            this._inboxSection.destroy();
             this._exitNodeSection.destroy();
 
             this._cancelRemeasure();

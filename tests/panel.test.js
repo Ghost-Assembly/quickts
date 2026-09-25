@@ -1894,7 +1894,7 @@ describe('the defaults when nothing is injected', () => {
         // The identity gettext leaves the source strings, and the fallback
         // ngettext still picks the plural form.
         expect(toggleOf()._warnings.label.text).toBe('2 warnings');
-        expect(await toggleOf()._chooseFiles({})).toEqual([]);
+        expect(await toggleOf()._sendSection._chooseFiles({})).toEqual([]);
 
         bare.disable();
     });
