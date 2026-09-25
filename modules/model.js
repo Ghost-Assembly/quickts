@@ -20,7 +20,7 @@
 
 import { NOTHING_DIRTY, dirtyFrom, isDirty, mergeDirty, parseBusLine } from './bus.js';
 import { isCanceled } from './cancel.js';
-import { messageFor, reasonOf } from './errors.js';
+import { REASON, messageFor, reasonOf } from './errors.js';
 import {
     currentProfileRequest,
     filePutRequest,
@@ -51,7 +51,7 @@ import { isUp } from './health.js';
 import { displayName } from './peers.js';
 import { PING_TYPE, describePing } from './ping.js';
 import { withExitNode } from './routes.js';
-import { waitingFiles } from './inbox.js';
+import { isSafeFileName, waitingFiles } from './inbox.js';
 import { fileNameOf } from './taildrop.js';
 import { backoffDelay, flushDelay } from './timing.js';
 
@@ -300,6 +300,11 @@ export class TailscaleModel {
      */
     async saveFile(name) {
         if (this.#disposed) return { path: '', error: '' };
+
+        // The daemon listed a name that cannot be a plain file here. It is
+        // left on the daemon, where `tailscale file get` can still reach it.
+        if (!isSafeFileName(name))
+            return { path: '', error: messageFor(REASON.PROTOCOL) };
 
         try {
             const path = await this.#client.saveFile(getFileRequest(name), name);

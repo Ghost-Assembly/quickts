@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatSize, uniqueName, waitingFiles } from '../modules/inbox.js';
+import {
+    MAX_CANDIDATES,
+    candidateNames,
+    formatSize,
+    isSafeFileName,
+    waitingFiles,
+} from '../modules/inbox.js';
 
 describe('waitingFiles', () => {
     it('reads the shape the daemon sends', () => {
@@ -63,53 +69,62 @@ describe('formatSize', () => {
     });
 });
 
-describe('uniqueName', () => {
-    const taken = (...names) => {
-        const set = new Set(names);
-        return name => set.has(name);
-    };
+describe('isSafeFileName', () => {
+    it.each(['report.pdf', 'README', 'a.tar.gz', 'photo (1).jpg', 'naïve café.txt'])(
+        'accepts %s',
+        name => {
+            expect(isSafeFileName(name)).toBe(true);
+        },
+    );
 
-    it('keeps a free name', () => {
-        expect(uniqueName('report.pdf', taken())).toBe('report.pdf');
+    // The name comes from whoever sent the file. tailscaled validates it too,
+    // but it becomes a path on this machine here, so it is checked here: none
+    // of these may name anything but a new file in the download directory.
+    it.each([
+        ['empty', ''],
+        ['a path', 'sub/dir.txt'],
+        ['an absolute path', '/etc/passwd'],
+        ['a parent reference', '..'],
+        ['a traversal', '../escape.txt'],
+        ['the directory itself', '.'],
+        ['a hidden file', '.bashrc'],
+        ['a NUL byte', 'a\0b.txt'],
+        ['not a string', null],
+    ])('refuses %s', (_reason, name) => {
+        expect(isSafeFileName(name)).toBe(false);
+    });
+});
+
+describe('candidateNames', () => {
+    const first = (name, count) => [...candidateNames(name)].slice(0, count);
+
+    it('offers the name as sent first', () => {
+        expect(first('report.pdf', 1)).toEqual(['report.pdf']);
     });
 
-    // Taildrop names come from whoever sent them, so two people can both send
-    // "report.pdf" and a save that overwrites is a save that loses data.
-    it('suffixes a taken name before the extension', () => {
-        expect(uniqueName('report.pdf', taken('report.pdf'))).toBe('report (1).pdf');
-    });
-
-    it('counts up past several collisions', () => {
-        expect(
-            uniqueName(
-                'report.pdf',
-                taken('report.pdf', 'report (1).pdf', 'report (2).pdf'),
-            ),
-        ).toBe('report (3).pdf');
+    // Two people can both send "report.pdf", and a save that overwrites is a
+    // save that loses data. The caller creates each candidate exclusively and
+    // moves on when one exists, so the numbering goes before the extension,
+    // the way every file manager does it.
+    it('numbers the rest before the extension', () => {
+        expect(first('report.pdf', 3)).toEqual([
+            'report.pdf',
+            'report (1).pdf',
+            'report (2).pdf',
+        ]);
     });
 
     it('handles a name with no extension', () => {
-        expect(uniqueName('README', taken('README'))).toBe('README (1)');
-    });
-
-    it('does not treat a leading dot as an extension', () => {
-        expect(uniqueName('.bashrc', taken('.bashrc'))).toBe('.bashrc (1)');
+        expect(first('README', 2)).toEqual(['README', 'README (1)']);
     });
 
     it('uses the last dot', () => {
-        expect(uniqueName('a.tar.gz', taken('a.tar.gz'))).toBe('a.tar (1).gz');
+        expect(first('a.tar.gz', 2)).toEqual(['a.tar.gz', 'a.tar (1).gz']);
     });
 
-    it('falls back for an empty name', () => {
-        expect(uniqueName('', taken())).toBe('file');
-    });
-
-    // A directory answering "taken" to everything would otherwise hang the
-    // Shell rather than fail a save.
-    it('terminates against a predicate that never yields', () => {
-        const result = uniqueName('a.txt', () => true);
-
-        expect(typeof result).toBe('string');
-        expect(result).not.toBe('a.txt');
+    // A directory where every name is taken must fail the save, not hang the
+    // Shell.
+    it('ends', () => {
+        expect([...candidateNames('a.txt')]).toHaveLength(MAX_CANDIDATES);
     });
 });

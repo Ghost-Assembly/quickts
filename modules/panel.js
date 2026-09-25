@@ -787,9 +787,11 @@ const QuickTSToggle = GObject.registerClass(
             if (generation !== this._devicesGeneration) return;
 
             row.setSensitive(true);
-            row.label.text = result.ok
-                ? formatPing(result, this._i18n)
-                : result.error || _('No reply');
+            // Never _(''): gettext answers the empty string with the
+            // catalog's header.
+            if (result.ok) row.label.text = formatPing(result, this._i18n);
+            else if (result.error) row.label.text = _(result.error);
+            else row.label.text = _('No reply');
         }
 
         /**
@@ -898,7 +900,7 @@ const QuickTSToggle = GObject.registerClass(
 
             if (error) {
                 row.setSensitive(true);
-                row.label.text = error;
+                row.label.text = _(error);
                 return;
             }
 

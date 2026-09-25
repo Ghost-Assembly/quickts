@@ -53,31 +53,52 @@ export function formatSize(bytes) {
     return `${rounded} ${units.at(unit)}`;
 }
 
+/** How many names {@link candidateNames} offers before giving up. */
+export const MAX_CANDIDATES = 1000;
+
 /**
- * A file name that will not collide with something already there.
+ * Whether a waiting file's name is safe to use as a file name here.
  *
- * Taildrop names come from whoever sent them, so two people can send
- * "report.pdf" and a save that overwrites is a save that loses data. The
- * suffix goes before the extension, the way every file manager does it.
+ * The name comes from whoever sent the file. tailscaled validates it on the
+ * way in, but this is where it becomes a path on this machine, so it is not
+ * taken on trust: anything that could name a directory, reach outside the
+ * download directory, or hide itself as a dot file is refused rather than
+ * repaired. A repaired name is a guess at what the sender meant.
  *
- * @param {string} name The name as sent.
- * @param {(candidate: string) => boolean} exists Whether a name is taken.
- * @returns {string} A free name.
+ * @param {unknown} name The name as the daemon lists it.
+ * @returns {boolean} True if it is one plain, visible file name.
  */
-export function uniqueName(name, exists) {
-    const safe = name === '' ? 'file' : name;
-    if (!exists(safe)) return safe;
+export function isSafeFileName(name) {
+    return (
+        typeof name === 'string' &&
+        name !== '' &&
+        !name.includes('/') &&
+        !name.includes('\0') &&
+        !name.startsWith('.')
+    );
+}
 
-    const dot = safe.lastIndexOf('.');
-    const stem = dot > 0 ? safe.slice(0, dot) : safe;
-    const extension = dot > 0 ? safe.slice(dot) : '';
+/**
+ * The names to try, in order, when saving a file.
+ *
+ * Offered rather than chosen: the caller creates each one exclusively and
+ * moves to the next only when it already exists. Checking for a free name
+ * first and writing it second is a race another process can win, and a
+ * symlink planted between the two would be followed.
+ *
+ * The suffix goes before the extension, the way every file manager does it.
+ * Bounded, so a directory where everything is taken fails the save rather
+ * than hanging the Shell.
+ *
+ * @param {string} name A name that passed {@link isSafeFileName}.
+ * @yields {string} Candidate names, the name as sent first.
+ */
+export function* candidateNames(name) {
+    yield name;
 
-    // Bounded rather than while(true): a directory that answers "taken" to
-    // everything would otherwise hang the Shell rather than fail a save.
-    for (let n = 1; n < 1000; n += 1) {
-        const candidate = `${stem} (${n})${extension}`;
-        if (!exists(candidate)) return candidate;
-    }
+    const dot = name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const extension = dot > 0 ? name.slice(dot) : '';
 
-    return `${stem} (${Date.now()})${extension}`;
+    for (let n = 1; n < MAX_CANDIDATES; n += 1) yield `${stem} (${n})${extension}`;
 }

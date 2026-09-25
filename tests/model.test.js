@@ -960,6 +960,24 @@ describe('waiting files', () => {
         expect(daemon.deleted.at(-1)).toContain('a.txt');
     });
 
+    // tailscaled validates names on the way in; this is where one becomes a
+    // path here, so it is checked again rather than trusted.
+    it.each(['../escape.txt', '.bashrc', 'sub/dir.txt'])(
+        'refuses to save %s, and does not forget it',
+        async name => {
+            const { model, daemon } = setup();
+            await model.start();
+            daemon.reset();
+
+            const result = await model.saveFile(name);
+
+            expect(result.error).toMatch(/\S/);
+            expect(daemon.saved).toEqual([]);
+            expect(daemon.deleted).toEqual([]);
+            expect(daemon.paths).toEqual([]);
+        },
+    );
+
     it('does not forget a file it could not write', async () => {
         const { model, daemon } = setup();
         await model.start();
