@@ -134,6 +134,26 @@ function unlistedReason(node) {
 }
 
 /**
+ * Whether the daemon names a node as a file target.
+ *
+ * The authoritative half of {@link sendTargets} on its own, for a send that
+ * starts from somewhere other than the Taildrop list — a device's own row —
+ * and so has only a node id to check.
+ *
+ * @param {object[]} fileTargets The /file-targets response.
+ * @param {string} stableId The node to look for.
+ * @returns {boolean} True if the daemon lists it.
+ */
+export function isListedTarget(fileTargets, stableId) {
+    return (
+        Boolean(stableId) &&
+        (Array.isArray(fileTargets) ? fileTargets : []).some(
+            target => target?.Node?.StableID === stableId,
+        )
+    );
+}
+
+/**
  * Whether anything at all can be sent to.
  *
  * The Taildrop submenu hides itself when this is false, rather than offering

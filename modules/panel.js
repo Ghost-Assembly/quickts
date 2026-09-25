@@ -27,10 +27,10 @@ import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js'
 import {
     SUMMARY,
     healthLines,
+    isOn,
     isUp,
     needsLogin,
     problemOf,
-    severityOf,
     summaryOf,
 } from './health.js';
 import { maxHeightStyle, menuMaxHeight } from './layout.js';
@@ -38,22 +38,14 @@ import { cityOf, groupByCountry, partitionMullvad } from './mullvad.js';
 import { KEYS, SHORTCUT_KEYS } from './settings.js';
 import { ROUTE } from './ping.js';
 import { advertisesExitNode } from './routes.js';
-import { canReceive, hasEligibleTarget, sendTargets } from './taildrop.js';
+import {
+    canReceive,
+    hasEligibleTarget,
+    isListedTarget,
+    sendTargets,
+} from './taildrop.js';
 import { formatSize } from './inbox.js';
 import { describeWarning } from './warnings.js';
-
-/*
- * Set by Panel's constructor before anything can call them. Declared without a
- * default on purpose: a default here is a function that can never run, because
- * nothing in this module is reachable before a Panel exists — and an
- * unreachable fallback is one nobody would notice was wrong.
- */
-let _;
-
-// Plural forms are not "%d warning" with an s bolted on. Several languages
-// have more than two, and some have none, so the count goes through ngettext
-// rather than being interpolated into a single string.
-let _n;
 
 /**
  * A row that acts without closing the menu.
@@ -222,8 +214,17 @@ const QuickTSIndicator = GObject.registerClass(
 /** The tile itself, and everything in its menu. */
 const QuickTSToggle = GObject.registerClass(
     class QuickTSToggle extends QuickSettings.QuickMenuToggle {
-        _init({ gicon, model, settings, chooseFiles }) {
-            super._init({ title: 'Tailscale', gicon, toggleMode: true });
+        _init({ gicon, model, settings, chooseFiles, i18n }) {
+            // Not toggleMode. In toggle mode St flips `checked` on click,
+            // before the daemon has said anything, and a refused change that
+            // leaves the state as it was produces no update to flip it back.
+            // `checked` is only ever set from the state, in sync().
+            super._init({ title: 'Tailscale', gicon, toggleMode: false });
+
+            // gettext and ngettext, passed down rather than held in module
+            // variables that a constructor assigns as a side effect.
+            this._i18n = i18n;
+            const { _ } = i18n;
 
             this._gicon = gicon;
             this._model = model;
@@ -236,15 +237,25 @@ const QuickTSToggle = GObject.registerClass(
             // anyone who happens to be logged out.
             this._loginRequested = false;
 
-            // Bumped whenever a section is rebuilt. An async handler captures
-            // it and compares before touching a row, because the row it was
-            // given may since have been destroyed by removeAll().
+            // One counter per section, bumped whenever that section is
+            // rebuilt. An async handler captures its section's counter and
+            // compares before touching a row, because the row it was given
+            // may since have been destroyed by removeAll(). Per section, not
+            // shared: a netmap blink rebuilding the devices has no business
+            // discarding a Taildrop listing or leaving a save reading
+            // "Saving…" after it finished.
             //
-            // This used to test `row.destroyed`, which is not a thing:
-            // ClutterActor installs no such property and gnome-shell never
-            // reads one, so the guard was always false and the write went
-            // ahead into a disposed actor. Only the test stub had it.
-            this._generation = 0;
+            // (`row.destroyed` is not a substitute. ClutterActor installs no
+            // such property, so a guard reading it is always false.)
+            this._devicesGeneration = 0;
+            this._taildropGeneration = 0;
+            this._inboxGeneration = 0;
+            this._suggestionGeneration = 0;
+
+            // A one-shot re-measure of the menu height; see
+            // _remeasureOnceLaidOut().
+            this._allocationId = 0;
+            this._laterId = 0;
 
             // The daemon's exit node recommendation, once asked for.
             this._suggestion = null;
@@ -257,9 +268,7 @@ const QuickTSToggle = GObject.registerClass(
 
             this._buildSections();
 
-            // Clicking the tile brings the tailnet up or down. `checked` is
-            // set from the state rather than left to toggleMode, so a change
-            // that the daemon refuses snaps back instead of lying.
+            // Clicking the tile brings the tailnet up or down.
             this.connectObject('clicked', () => this._onClicked(), this);
 
             this.menu.connectObject(
@@ -271,6 +280,8 @@ const QuickTSToggle = GObject.registerClass(
 
         /** Build the sections once; their contents are refilled on each change. */
         _buildSections() {
+            const { _ } = this._i18n;
+
             // Anything the user can act on, above everything else: an
             // unreachable daemon, a login that is waiting to happen.
             this._problems = new PopupMenu.PopupMenuSection();
@@ -288,7 +299,7 @@ const QuickTSToggle = GObject.registerClass(
             this._exitNode = new PopupMenu.PopupSubMenuMenuItem(_('Exit node'), true);
             this.menu.addMenuItem(this._exitNode);
             this._exitSection = new NavigableSection(this._exitNode, {
-                title: state => exitNodeLabel(state),
+                title: state => exitNodeLabel(state, this._i18n),
                 back: _('All exit nodes'),
                 resolve: (code, state) =>
                     this._exitChoices(state).groups.find(
@@ -346,6 +357,8 @@ const QuickTSToggle = GObject.registerClass(
          * destroy the actor the click is still traveling through.
          */
         _buildOptions() {
+            const { _ } = this._i18n;
+
             this._switches = [
                 [
                     state => state.acceptRoutes,
@@ -409,13 +422,12 @@ const QuickTSToggle = GObject.registerClass(
          * @param {string[]|null} [fields] Changed field names, or null for all.
          */
         sync(state, fields = null) {
+            const { _ } = this._i18n;
+
             const moved = name => fields === null || fields.includes(name);
 
-            this.checked = isUp(state);
-            this.subtitle = subtitleFor(state);
-
-            const severity = severityOf(state);
-            this._setSeverityClass(severity);
+            this.checked = isOn(state);
+            this.subtitle = subtitleFor(state, this._i18n);
             this.menu.setHeader(this._gicon, _('Tailscale'), this.subtitle);
 
             this._maybeOpenAuthUrl(state);
@@ -453,21 +465,13 @@ const QuickTSToggle = GObject.registerClass(
                 return;
             }
 
-            Gio.AppInfo.launch_default_for_uri(state.authUrl, null);
-        }
-
-        /**
-         * @param {string} severity One of SEVERITY.
-         */
-        _setSeverityClass(severity) {
-            for (const name of ['quickts-ok', 'quickts-warning', 'quickts-error'])
-                this.remove_style_class_name(name);
-
-            this.add_style_class_name(`quickts-${severity}`);
+            openUri(state.authUrl);
         }
 
         /** @param {object} state A snapshot. */
         _syncProblems(state) {
+            const { _ } = this._i18n;
+
             this._problems.removeAll();
 
             const problem = problemOf(state);
@@ -484,7 +488,7 @@ const QuickTSToggle = GObject.registerClass(
                 if (problem.command)
                     item.connectObject(
                         'activate',
-                        () => copyText(problem.command, this._gicon),
+                        () => copyText(problem.command, this._gicon, this._i18n),
                         this,
                     );
                 else item.setSensitive(false);
@@ -508,6 +512,8 @@ const QuickTSToggle = GObject.registerClass(
          * @param {object} state A snapshot.
          */
         _syncWarnings(state) {
+            const { _n } = this._i18n;
+
             this._warnings.menu.removeAll();
 
             const { lines, hidden } = healthLines(state);
@@ -547,6 +553,8 @@ const QuickTSToggle = GObject.registerClass(
          * @param {Function} open Drill into a country.
          */
         _renderExitNodes(menu, state, open) {
+            const { _ } = this._i18n;
+
             const { regular, groups } = this._exitChoices(state);
 
             this._addRow(
@@ -663,7 +671,7 @@ const QuickTSToggle = GObject.registerClass(
 
         /** @param {object} state A snapshot. */
         _syncDevices(state) {
-            this._generation += 1;
+            this._devicesGeneration += 1;
             this._deviceSection.render(state);
         }
 
@@ -675,6 +683,8 @@ const QuickTSToggle = GObject.registerClass(
          * @param {Function} open Drill into a device.
          */
         _renderDevices(menu, state, open) {
+            const { _ } = this._i18n;
+
             const nodes = this._visibleNodes(state);
 
             if (nodes.length === 0) {
@@ -708,6 +718,8 @@ const QuickTSToggle = GObject.registerClass(
          * @param {object} state A snapshot.
          */
         _renderDeviceActions(menu, node, state) {
+            const { _ } = this._i18n;
+
             const address = node.ips.at(0) ?? '';
             const fqdn =
                 node.name && state.magicDNSSuffix
@@ -730,12 +742,12 @@ const QuickTSToggle = GObject.registerClass(
             );
 
             this._addRow(menu, _('Copy address'), 'edit-copy-symbolic', () =>
-                copyText(address, this._gicon),
+                copyText(address, this._gicon, this._i18n),
             );
 
             if (fqdn && fqdn !== node.name) {
                 this._addRow(menu, _('Copy DNS name'), 'edit-copy-symbolic', () =>
-                    copyText(fqdn, this._gicon),
+                    copyText(fqdn, this._gicon, this._i18n),
                 );
             }
 
@@ -761,20 +773,22 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _pingDevice(node, row) {
+            const { _ } = this._i18n;
+
             row.label.text = _('Pinging…');
             row.setSensitive(false);
 
-            const generation = this._generation;
+            const generation = this._devicesGeneration;
             const result = await this._model.ping(node.ips.at(0) ?? '');
 
             // The section may have been rebuilt, or the extension disabled,
             // while the daemon waited for the peer to answer — in which case
             // this row has been destroyed and writing to it is a GJS critical.
-            if (generation !== this._generation) return;
+            if (generation !== this._devicesGeneration) return;
 
             row.setSensitive(true);
             row.label.text = result.ok
-                ? formatPing(result)
+                ? formatPing(result, this._i18n)
                 : result.error || _('No reply');
         }
 
@@ -790,17 +804,17 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _syncTaildrop() {
-            const generation = this._generation;
+            const { _ } = this._i18n;
+
+            const generation = ++this._taildropGeneration;
             const targets = sendTargets(
                 this._model.state.nodes,
                 await this._model.fileTargets(),
             );
 
-            // The submenu may have been destroyed while the request was in
-            // flight. Checked the same way as the ping row: the old
-            // `if (!this._taildrop)` could never be true, because nothing ever
-            // assigned null to it.
-            if (generation !== this._generation) return;
+            // A later listing, or a disable, has overtaken this one while the
+            // request was in flight.
+            if (generation !== this._taildropGeneration) return;
 
             this._taildrop.menu.removeAll();
             this._taildrop.visible = hasEligibleTarget(targets);
@@ -836,9 +850,11 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _syncInbox() {
-            const generation = this._generation;
+            const { _n } = this._i18n;
+
+            const generation = ++this._inboxGeneration;
             const files = await this._model.waitingFiles();
-            if (generation !== this._generation) return;
+            if (generation !== this._inboxGeneration) return;
 
             this._inbox.menu.removeAll();
             this._inbox.visible = files.length > 0;
@@ -871,12 +887,14 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _saveFile(file, row) {
-            const generation = this._generation;
+            const { _ } = this._i18n;
+
+            const generation = this._inboxGeneration;
             row.label.text = _('Saving %s…').replace('%s', file.name);
             row.setSensitive(false);
 
             const { path, error } = await this._model.saveFile(file.name);
-            if (generation !== this._generation) return;
+            if (generation !== this._inboxGeneration) return;
 
             if (error) {
                 row.setSensitive(true);
@@ -896,17 +914,21 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _syncSuggestion() {
+            const generation = ++this._suggestionGeneration;
+
             if (this._model.state.exitNodeId) {
                 this._suggestion = null;
                 return;
             }
 
-            const generation = this._generation;
             const suggestion = await this._model.suggestedExitNode();
-            if (generation !== this._generation || !suggestion.id) return;
+            if (generation !== this._suggestionGeneration) return;
 
-            this._suggestion = suggestion;
-            this._syncExitNode(this._model.state);
+            // Replaced even when empty. Keeping the previous answer when the
+            // daemon has withdrawn it offers a node it no longer recommends.
+            const had = this._suggestion !== null;
+            this._suggestion = suggestion.id ? suggestion : null;
+            if (had || this._suggestion) this._syncExitNode(this._model.state);
         }
 
         /**
@@ -916,6 +938,20 @@ const QuickTSToggle = GObject.registerClass(
          * @returns {Promise<void>} Done.
          */
         async _sendFiles(node) {
+            const { _, _n } = this._i18n;
+
+            // Only to a peer the daemon itself names as a target, whichever
+            // row started this. A peer's own TaildropTarget can say available
+            // while the daemon, which decides, does not list it — and asking
+            // first means nobody picks files for a send that cannot happen.
+            if (!isListedTarget(await this._model.fileTargets(), node.id)) {
+                Main.notify(
+                    _('Cannot send to %s').replace('%s', node.name),
+                    _('Tailscale does not list it as able to receive files right now.'),
+                );
+                return;
+            }
+
             let uris;
             try {
                 uris = await this._chooseFiles({
@@ -940,13 +976,16 @@ const QuickTSToggle = GObject.registerClass(
             if (sent > 0)
                 showOsd(
                     this._gicon,
-                    _('Sent %d file to %s')
+                    _n('Sent %d file to %s', 'Sent %d files to %s', sent)
                         .replace('%d', String(sent))
                         .replace('%s', node.name),
                 );
 
+            // Main.notify, not Main.notifyError: notifyError also copies its
+            // text to the journal, and a node name and file names are
+            // exactly what SECURITY.md promises stay out of it.
             if (failed.length > 0)
-                Main.notifyError(
+                Main.notify(
                     _('Could not send to %s').replace('%s', node.name),
                     failed.join(', '),
                 );
@@ -987,11 +1026,15 @@ const QuickTSToggle = GObject.registerClass(
             // nothing a person would notice. Starting the login is what they
             // were asking for.
             if (needsLogin(state)) {
-                this._startLogin();
+                void this._startLogin();
                 return;
             }
 
-            void this._model.setRunning(!isUp(state));
+            // Decided by the preference, not by whether the tailnet is up: a
+            // tailnet that is starting, or waiting for an admin to approve
+            // this machine, is on and not yet up, and a click has to be able
+            // to turn it off.
+            void this._model.setRunning(!state.running);
         }
 
         /** Ask the daemon for a login URL, and remember that we want it. */
@@ -1016,6 +1059,7 @@ const QuickTSToggle = GObject.registerClass(
          */
         _onOpenStateChanged(open) {
             this._model.setMenuOpen(open);
+            this._cancelRemeasure();
 
             if (!open) {
                 // Reopening should land on the lists, not wherever the last
@@ -1028,6 +1072,7 @@ const QuickTSToggle = GObject.registerClass(
             }
 
             this._applyMaxHeight();
+            this._remeasureOnceLaidOut();
             void this._syncTaildrop();
             void this._syncInbox();
             void this._syncSuggestion();
@@ -1063,10 +1108,55 @@ const QuickTSToggle = GObject.registerClass(
             );
         }
 
+        /**
+         * Measure the height again once the menu has actually been laid out.
+         *
+         * Opened from the keybinding, quick settings and this menu open in
+         * the same breath, and the position read in _applyMaxHeight is from
+         * before the Shell has allocated either — on the first open of a
+         * session it is 0, and the menu is allowed to run off the bottom of
+         * the screen. The first allocation after opening carries the real
+         * position. The style is set from a BEFORE_REDRAW later rather than
+         * from the allocation notification itself, so it does not change
+         * layout in the middle of a layout pass; St ignores a style that has
+         * not changed, so when the first reading was right this costs
+         * nothing.
+         */
+        _remeasureOnceLaidOut() {
+            const actor = this.menu.actor;
+
+            this._allocationId = actor.connect('notify::allocation', () => {
+                actor.disconnect(this._allocationId);
+                this._allocationId = 0;
+
+                this._laterId = global.compositor
+                    .get_laters()
+                    .add(Meta.LaterType.BEFORE_REDRAW, () => {
+                        this._laterId = 0;
+                        this._applyMaxHeight();
+                        return false;
+                    });
+            });
+        }
+
+        /** Drop a re-measure that has not happened yet. */
+        _cancelRemeasure() {
+            if (this._allocationId) this.menu.actor.disconnect(this._allocationId);
+            this._allocationId = 0;
+
+            if (this._laterId) global.compositor.get_laters().remove(this._laterId);
+            this._laterId = 0;
+        }
+
         destroy() {
             // Invalidates any async handler still waiting — a ping, a Taildrop
             // listing — so it cannot write into the rows about to be torn down.
-            this._generation += 1;
+            this._devicesGeneration += 1;
+            this._taildropGeneration += 1;
+            this._inboxGeneration += 1;
+            this._suggestionGeneration += 1;
+
+            this._cancelRemeasure();
 
             // The rows carry handlers of their own — every activate, every
             // toggled, every long-press gesture — and disconnectObject on the
@@ -1078,6 +1168,14 @@ const QuickTSToggle = GObject.registerClass(
 
             this.menu.disconnectObject(this);
             this.disconnectObject(this);
+
+            // The Shell parents this menu into the quick settings overlay and
+            // never destroys it (Shell 50.3 quickSettings.js has no destroy
+            // call), so without this every disable — every screen lock —
+            // would leave the menu behind, and with it the overlay's
+            // open-state-changed closure that still reaches this toggle, the
+            // model and the transport.
+            this.menu.destroy();
             super.destroy();
         }
     },
@@ -1090,7 +1188,11 @@ export class Panel {
      * @param {object} options.model The store.
      * @param {object} options.settings This extension's GSettings.
      * @param {string} options.iconPath Absolute path to the tile icon.
-     * @param {(message: string) => string} options.gettext Translation function.
+     * @param {(message: string) => string} [options.gettext] Translation function.
+     * @param {(singular: string, plural: string, count: number) => string} [options.ngettext]
+     *   Plural-aware translation. Plural forms are not "%d warning" with an s
+     *   bolted on: several languages have more than two, and some have none.
+     * @param {Function} [options.chooseFiles] Opens the portal's file chooser.
      */
     constructor({ model, settings, iconPath, gettext, ngettext, chooseFiles }) {
         this._model = model;
@@ -1100,10 +1202,12 @@ export class Panel {
         this._disposers = [];
         this._bindings = [];
 
-        _ = gettext ?? (message => message);
-        _n =
-            ngettext ??
-            ((singular, plural, count) => (count === 1 ? singular : plural));
+        this._i18n = Object.freeze({
+            _: gettext ?? (message => message),
+            _n:
+                ngettext ??
+                ((singular, plural, count) => (count === 1 ? singular : plural)),
+        });
     }
 
     /** Build the tile and register the keybinding. */
@@ -1116,6 +1220,7 @@ export class Panel {
             model: this._model,
             settings: this._settings,
             chooseFiles: this._chooseFiles,
+            i18n: this._i18n,
         });
 
         this._indicator.quickSettingsItems.push(this._toggle);
@@ -1149,10 +1254,12 @@ export class Panel {
 
     /** Register the shortcut that opens the menu. */
     _bindKeybinding() {
-        // addKeybinding returns NONE when Mutter refuses the accelerator,
-        // which happens when something else already claims it. Recording a key
-        // that was never registered makes disable() call removeKeybinding on
-        // it, and the Shell warns.
+        // addKeybinding returns NONE when Mutter refuses the binding, which it
+        // does when a keybinding of the same NAME is already registered —
+        // Mutter's names are global across the Shell, hence the quickts-
+        // prefix on the key. It does not check whether the accelerator
+        // collides with another. Recording a key that was never registered
+        // makes disable() call removeKeybinding on it, and the Shell warns.
         const action = Main.wm.addKeybinding(
             SHORTCUT_KEYS.OPEN_MENU,
             this._settings,
@@ -1206,9 +1313,10 @@ export class Panel {
  * rather than fragments.
  *
  * @param {object} state A snapshot.
+ * @param {{_: Function, _n: Function}} i18n gettext and ngettext.
  * @returns {string} A subtitle.
  */
-function subtitleFor(state) {
+function subtitleFor(state, { _, _n }) {
     const { kind, value } = summaryOf(state);
 
     switch (kind) {
@@ -1220,6 +1328,8 @@ function subtitleFor(state) {
             return _('In use by another user');
         case SUMMARY.STARTING:
             return _('Connecting…');
+        case SUMMARY.NEEDS_APPROVAL:
+            return _('Waiting for approval');
         case SUMMARY.OFF:
             return _('Off');
         case SUMMARY.EXIT_NODE:
@@ -1243,8 +1353,9 @@ function subtitleFor(state) {
  *
  * @param {string} text What to copy.
  * @param {object} gicon Icon for the confirmation.
+ * @param {{_: Function}} i18n gettext.
  */
-function copyText(text, gicon) {
+function copyText(text, gicon, { _ }) {
     if (!text) return;
 
     const clipboard = St.Clipboard.get_default();
@@ -1313,13 +1424,30 @@ function warningRow(line) {
         return item;
     }
 
-    item.connectObject(
-        'activate',
-        () => Gio.AppInfo.launch_default_for_uri(url, null),
-        item,
-    );
+    item.connectObject('activate', () => openUri(url), item);
 
     return item;
+}
+
+/**
+ * Hand a URI to whichever application claims it, the way the Shell does.
+ *
+ * With a launch context, as js/ui/messageList.js opens a link, so the browser
+ * gets startup notification and lands on the current workspace. And caught:
+ * GIO throws when nothing handles the scheme, and the login URL is opened from
+ * inside sync(), where an exception would abandon the rest of the menu.
+ *
+ * @param {string} uri An http or https URI, already checked by the caller.
+ */
+function openUri(uri) {
+    try {
+        Gio.AppInfo.launch_default_for_uri(
+            uri,
+            global.create_app_launch_context(0, -1),
+        );
+    } catch (error) {
+        console.warn(`[quickts] could not open a browser: ${error.message ?? error}`);
+    }
 }
 
 /**
@@ -1329,19 +1457,24 @@ function warningRow(line) {
  * same latency is a different situation depending on whether the packets went
  * straight there or through one of Tailscale's relays.
  *
+ * Each case is one whole template, so a translator sees the sentence rather
+ * than fragments glued together with a comma this code chose.
+ *
  * @param {object} result From modules/ping.js.
+ * @param {{_: Function}} i18n gettext.
  * @returns {string} A label.
  */
-function formatPing(result) {
-    const latency = _('%s ms').replace('%s', String(result.latencyMs));
+function formatPing(result, { _ }) {
+    const latency = String(result.latencyMs);
 
-    if (result.route === ROUTE.DIRECT) return `${latency}, ${_('direct')}`;
-    if (result.route === ROUTE.RELAY)
-        return result.relay
-            ? `${latency}, ${_('relayed via %s').replace('%s', result.relay)}`
-            : `${latency}, ${_('relayed')}`;
+    if (result.route === ROUTE.DIRECT) return _('%s ms, direct').replace('%s', latency);
+    if (result.route === ROUTE.RELAY && result.relay)
+        return _('%s ms, relayed via %s')
+            .replace('%s', latency)
+            .replace('%s', result.relay);
+    if (result.route === ROUTE.RELAY) return _('%s ms, relayed').replace('%s', latency);
 
-    return latency;
+    return _('%s ms').replace('%s', latency);
 }
 
 /**
@@ -1351,9 +1484,10 @@ function formatPing(result) {
  * names no peer, so there is a node in use and no name for it.
  *
  * @param {object} state A snapshot.
+ * @param {{_: Function}} i18n gettext.
  * @returns {string} A label.
  */
-function exitNodeLabel(state) {
+function exitNodeLabel(state, { _ }) {
     if (state.exitNodeName) return _('Exit node: %s').replace('%s', state.exitNodeName);
 
     return state.exitNodeId ? _('Exit node: automatic') : _('Exit node');

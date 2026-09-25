@@ -14,17 +14,14 @@
 /** Handlers connected anywhere, so a test can prove they were all released. */
 export const liveHandlers = new Set();
 
-// owner -> Set of {actor, id}. GJS's connectObject ties a handler's lifetime
-// to the owner wherever it was connected, so disconnectObject(owner) has to
-// reach handlers on objects the owner never held a reference to — a gesture
-// added to a menu row, say. A per-actor map alone would miss those, and the
-// panel would look leak-free here while leaking in a real Shell.
-const byOwner = new Map();
+// Per emitter, as gnome-shell's signalTracker.js is: emitter.disconnectObject
+// (owner) releases only the handlers on THAT emitter. A stub that released an
+// owner's handlers on every emitter at once would let the panel forget one
+// and still look leak-free here.
 
 /** Reset between tests. */
 export function resetActors() {
     liveHandlers.clear();
-    byOwner.clear();
 }
 
 let nextHandlerId = 1;
@@ -81,15 +78,12 @@ export class FakeActor {
             const id = nextHandlerId++;
             this.handlers.set(id, { signal, callback, owner });
             liveHandlers.add(id);
-
-            if (!byOwner.has(owner)) byOwner.set(owner, new Set());
-            byOwner.get(owner).add({ actor: this, id });
         }
     }
 
     disconnectObject(owner) {
-        for (const entry of byOwner.get(owner) ?? []) entry.actor.disconnect(entry.id);
-        byOwner.delete(owner);
+        for (const [id, handler] of [...this.handlers])
+            if (handler.owner === owner) this.disconnect(id);
     }
 
     /** Fire every handler for a signal, as the Shell would. */

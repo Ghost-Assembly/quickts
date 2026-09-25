@@ -14,7 +14,11 @@ export const addCalls = [];
 /** Every removeKeybinding call. */
 export const removeCalls = [];
 
-/** Names Mutter should refuse, simulating an accelerator already in use. */
+/**
+ * Names Mutter should refuse. meta_prefs_add_keybinding refuses a NAME that is
+ * already registered — by anything in the Shell — and never checks whether the
+ * accelerator collides.
+ */
 export const refuse = new Set();
 
 /** Indicators handed to addExternalIndicator. */
@@ -50,7 +54,7 @@ export const wm = {
     addKeybinding(name, _settings, _flags, _mode, handler) {
         addCalls.push(name);
         // 0 is Meta.KeyBindingAction.NONE, which is what Mutter returns when
-        // the accelerator is already claimed.
+        // a keybinding of the same name is already registered.
         if (refuse.has(name)) return 0;
 
         registered.set(name, handler);
@@ -79,7 +83,12 @@ export function notify(message, details) {
     notifications.push({ kind: 'notify', message, details });
 }
 
+// Logs as the real one does (js/ui/main.js: "Also print to stderr so it's
+// logged somewhere"), so a test can see what reaches the journal.
 export function notifyError(message, details) {
+    if (details) console.warn(`error: ${message}: ${details}`);
+    else console.warn(`error: ${message}`);
+
     notifications.push({ kind: 'error', message, details });
 }
 
