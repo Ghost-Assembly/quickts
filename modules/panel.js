@@ -1,8 +1,10 @@
 // The actor tree: the quick settings tile, its menu, and the keybinding.
 //
-// This is the one file that touches St, Clutter and the Shell's own modules,
-// and it deliberately holds no decisions. What to show comes from
-// modules/health.js, how to group it from modules/peers.js and
+// This file and the section modules it builds — exit-node-section.js,
+// device-section.js and taildrop-section.js, with menu-items.js and
+// navigable-section.js beneath them — are the ones that touch St and the
+// Shell's own modules, and they deliberately hold no decisions. What to show
+// comes from modules/health.js, how to group it from modules/peers.js and
 // modules/mullvad.js, how tall to make it from modules/layout.js. What is left
 // here is construction and teardown.
 //
@@ -13,7 +15,6 @@
 
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -33,153 +34,19 @@ import {
     summaryOf,
 } from './health.js';
 import { maxHeightStyle, menuMaxHeight } from './layout.js';
-import { cityOf, groupByCountry, partitionMullvad } from './mullvad.js';
 import { KEYS, SHORTCUT_KEYS } from './settings.js';
-import { ROUTE } from './ping.js';
 import { advertisesExitNode } from './routes.js';
 import {
-    canReceive,
-    hasEligibleTarget,
-    isListedTarget,
-    sendTargets,
-} from './taildrop.js';
-import { formatSize } from './inbox.js';
-import { describeWarning } from './warnings.js';
-
-/**
- * A row that acts without closing the menu.
- *
- * PopupMenuBase connects to every item's 'activate' with ConnectFlags.AFTER
- * and calls itemActivated(), which closes the top menu — so by default a click
- * anywhere dismisses the whole panel. That is right for a row whose job is
- * finished once it is clicked, like copying an address or picking an exit
- * node, and wrong for one whose result appears in the menu, or that navigates
- * within it.
- *
- * Declining to chain up is how gnome-shell itself keeps a menu open: it is
- * what PopupSwitchMenuItem does for the space key.
- */
-const ActionMenuItem = GObject.registerClass(
-    class QuickTSActionMenuItem extends PopupMenu.PopupImageMenuItem {
-        _init(text, icon, onActivate) {
-            super._init(text, icon);
-            this._onActivate = onActivate;
-        }
-
-        /**
-         * @param {object} _event Unused; the row is the only context needed.
-         */
-        activate(_event) {
-            this._onActivate(this);
-        }
-    },
-);
-
-/**
- * A switch that does not dismiss the menu when it is flipped.
- *
- * Turning on accept-routes and then accept-DNS should not mean two trips
- * through the panel. gnome-shell already allows this from the keyboard —
- * PopupSwitchMenuItem returns early for the space key — and this extends the
- * same behavior to the pointer.
- */
-const StayOpenSwitchMenuItem = GObject.registerClass(
-    class QuickTSSwitchMenuItem extends PopupMenu.PopupSwitchMenuItem {
-        /**
-         * @param {object} _event Unused; toggling is the whole action.
-         */
-        activate(_event) {
-            this.toggle();
-        }
-    },
-);
-
-/**
- * A submenu that shows either a list or the detail of one entry in it.
- *
- * GNOME allows exactly one open submenu per top menu — PopupSubMenu's open
- * handler calls _getTopMenu()._setOpenedSubMenu(), which closes whichever was
- * already open — so "a list you can drill into" cannot be a nested submenu.
- * It has to be navigation inside one submenu, and both the device list and the
- * Mullvad country list are that same shape.
- *
- * Having the shape in one place is not only less code: it means the two cannot
- * drift into behaving differently, which they had already begun to do.
- */
-class NavigableSection {
-    /**
-     * @param {object} item The PopupSubMenuMenuItem to drive.
-     * @param {object} options Behavior.
-     * @param {() => string} options.title Label while showing the list.
-     * @param {string} options.back Label of the row that returns to the list.
-     * @param {(view: string, state: object) => object|null} options.resolve
-     *   Find the entry a view names, or null if it has gone.
-     * @param {(entry: object) => string} options.detailTitle Label while showing one entry.
-     * @param {(menu: object, state: object, open: Function) => void} options.renderList
-     *   Fill the menu with the list; call `open(view)` to drill in.
-     * @param {(menu: object, entry: object, state: object) => void} options.renderDetail
-     *   Fill the menu with one entry's actions.
-     */
-    constructor(item, options) {
-        this._item = item;
-        this._options = options;
-        this._view = null;
-    }
-
-    /** Forget any drill-down, without redrawing. */
-    reset() {
-        const had = this._view !== null;
-        this._view = null;
-        return had;
-    }
-
-    /**
-     * Drill into an entry, or back out with null.
-     *
-     * @param {string|null} view The entry to show.
-     * @param {object} state A snapshot.
-     */
-    show(view, state) {
-        this._view = view;
-        this.render(state);
-
-        // render() destroyed the row that was activated, and with it the
-        // submenu's idea of what to keep open.
-        this._item.menu.open(BoxPointer.PopupAnimation.NONE);
-    }
-
-    /**
-     * Redraw from the current state.
-     *
-     * @param {object} state A snapshot.
-     */
-    render(state) {
-        const { title, back, resolve, detailTitle, renderList, renderDetail } =
-            this._options;
-
-        this._item.menu.removeAll();
-
-        // An entry that vanished while its detail was on screen takes the view
-        // back to the list rather than leaving it on nothing.
-        const entry = this._view === null ? null : resolve(this._view, state);
-        if (this._view !== null && !entry) this._view = null;
-
-        if (entry) {
-            this._item.label.text = detailTitle(entry);
-            this._item.menu.addMenuItem(
-                new ActionMenuItem(back, 'go-previous-symbolic', () =>
-                    this.show(null, state),
-                ),
-            );
-            this._item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            renderDetail(this._item.menu, entry, state);
-            return;
-        }
-
-        this._item.label.text = title(state);
-        renderList(this._item.menu, state, view => this.show(view, state));
-    }
-}
+    StayOpenSwitchMenuItem,
+    addDisabledRow,
+    addRow,
+    copyText,
+    openUri,
+    warningRow,
+} from './menu-items.js';
+import { ExitNodeSection } from './exit-node-section.js';
+import { DeviceSection } from './device-section.js';
+import { InboxSection, SendSection } from './taildrop-section.js';
 
 /** The tile's own icon, next to the clock. */
 const QuickTSIndicator = GObject.registerClass(
@@ -228,7 +95,6 @@ const QuickTSToggle = GObject.registerClass(
             this._gicon = gicon;
             this._model = model;
             this._settings = settings;
-            this._chooseFiles = chooseFiles;
 
             // Set only when the user asks to log in. The auth URL is present
             // in the state whenever the daemon is waiting for one, and opening
@@ -236,32 +102,14 @@ const QuickTSToggle = GObject.registerClass(
             // anyone who happens to be logged out.
             this._loginRequested = false;
 
-            // One counter per section, bumped whenever that section is
-            // rebuilt. An async handler captures its section's counter and
-            // compares before touching a row, because the row it was given
-            // may since have been destroyed by removeAll(). Per section, not
-            // shared: a netmap blink rebuilding the devices has no business
-            // discarding a Taildrop listing or leaving a save reading
-            // "Saving…" after it finished.
-            //
-            // (`row.destroyed` is not a substitute. ClutterActor installs no
-            // such property, so a guard reading it is always false.)
-            this._devicesGeneration = 0;
-            this._taildropGeneration = 0;
-            this._inboxGeneration = 0;
-            this._suggestionGeneration = 0;
-
             // A one-shot re-measure of the menu height; see
             // _remeasureOnceLaidOut().
             this._allocationId = 0;
             this._laterId = 0;
 
-            // The daemon's exit node recommendation, once asked for.
-            this._suggestion = null;
-
-            // The snapshot _exitChoices last partitioned, and its result.
-            this._exitChoicesFor = null;
-            this._exitChoicesValue = null;
+            // What each section module needs from the toggle, passed
+            // explicitly rather than reached for.
+            this._deps = { model, settings, i18n, gicon, chooseFiles };
 
             this.menu.setHeader(gicon, _('Tailscale'), '');
 
@@ -295,49 +143,31 @@ const QuickTSToggle = GObject.registerClass(
             this._warnings.visible = false;
             this.menu.addMenuItem(this._warnings);
 
-            this._exitNode = new PopupMenu.PopupSubMenuMenuItem(_('Exit node'), true);
-            this.menu.addMenuItem(this._exitNode);
-            this._exitSection = new NavigableSection(this._exitNode, {
-                title: state => exitNodeLabel(state, this._i18n),
-                back: _('All exit nodes'),
-                resolve: (code, state) =>
-                    this._exitChoices(state).groups.find(
-                        group => group.country.code === code,
-                    ) ?? null,
-                detailTitle: group => group.country.name,
-                renderList: (menu, state, open) =>
-                    this._renderExitNodes(menu, state, open),
-                renderDetail: (menu, group) => {
-                    for (const node of group.nodes)
-                        menu.addMenuItem(this._exitNodeItem(node, cityOf(node)));
-                },
+            // The sections with rows of their own live in their own modules.
+            // Each keeps one generation counter, bumped whenever that
+            // section is rebuilt. An async handler captures its section's
+            // counter and compares before touching a row, because the row it
+            // was given may since have been destroyed by removeAll(). Per
+            // section, not shared: a netmap blink rebuilding the devices has
+            // no business discarding a Taildrop listing or leaving a save
+            // reading "Saving…" after it finished.
+            //
+            // (`row.destroyed` is not a substitute. ClutterActor installs no
+            // such property, so a guard reading it is always false.)
+            this._exitNodeSection = new ExitNodeSection(this.menu, this._deps);
+            this._exitNode = this._exitNodeSection.item;
+
+            this._deviceSection = new DeviceSection(this.menu, {
+                ...this._deps,
+                sendFiles: node => this._sendSection.send(node),
             });
+            this._devices = this._deviceSection.item;
 
-            this._devices = new PopupMenu.PopupSubMenuMenuItem(_('Devices'), true);
-            this.menu.addMenuItem(this._devices);
-            this._deviceSection = new NavigableSection(this._devices, {
-                title: () => _('Devices'),
-                back: _('All devices'),
-                resolve: (id, state) =>
-                    this._visibleNodes(state).find(node => node.id === id) ?? null,
-                detailTitle: node => node.name,
-                renderList: (menu, state, open) =>
-                    this._renderDevices(menu, state, open),
-                renderDetail: (menu, node, state) =>
-                    this._renderDeviceActions(menu, node, state),
-            });
+            this._sendSection = new SendSection(this.menu, this._deps);
+            this._taildrop = this._sendSection.item;
 
-            this._taildrop = new PopupMenu.PopupSubMenuMenuItem(_('Send files'), true);
-            this._taildrop.visible = false;
-            this.menu.addMenuItem(this._taildrop);
-
-            // Taildrop's other half. The daemon holds an incoming file until
-            // something asks for it, so without this the extension can send
-            // files and is blind to the ones arriving.
-            this._inbox = new PopupMenu.PopupSubMenuMenuItem(_('Received files'), true);
-            this._inbox.icon.icon_name = 'document-save-symbolic';
-            this._inbox.visible = false;
-            this.menu.addMenuItem(this._inbox);
+            this._inboxSection = new InboxSection(this.menu, this._deps);
+            this._inbox = this._inboxSection.item;
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -436,8 +266,10 @@ const QuickTSToggle = GObject.registerClass(
 
             if (moved('health')) this._syncWarnings(state);
 
-            if (moved('nodes') || moved('exitNodeId')) this._syncExitNode(state);
-            if (moved('nodes') || moved('magicDNSSuffix')) this._syncDevices(state);
+            if (moved('nodes') || moved('exitNodeId'))
+                this._exitNodeSection.sync(state);
+            if (moved('nodes') || moved('magicDNSSuffix'))
+                this._deviceSection.sync(state);
 
             this._syncOptions(state);
 
@@ -496,11 +328,12 @@ const QuickTSToggle = GObject.registerClass(
             }
 
             if (needsLogin(state)) {
-                this._addRow(
+                addRow(
                     this._problems,
                     _('Log in…'),
                     'avatar-default-symbolic',
                     () => this._startLogin(),
+                    this,
                 );
             }
         }
@@ -539,460 +372,6 @@ const QuickTSToggle = GObject.registerClass(
         }
 
         /** @param {object} state A snapshot. */
-        _syncExitNode(state) {
-            this._exitSection.render(state);
-        }
-
-        /**
-         * The exit node list: None, the tailnet's own candidates, then one row
-         * per Mullvad country.
-         *
-         * @param {object} menu The submenu to fill.
-         * @param {object} state A snapshot.
-         * @param {Function} open Drill into a country.
-         */
-        _renderExitNodes(menu, state, open) {
-            const { _ } = this._i18n;
-
-            const { regular, groups } = this._exitChoices(state);
-
-            this._addRow(
-                menu,
-                _('None'),
-                state.exitNodeId ? '' : 'object-select-symbolic',
-                () => void this._model.setExitNode(''),
-            );
-
-            // The daemon's own recommendation, offered only while nothing is
-            // chosen — once one is in use, a suggestion is just noise.
-            if (this._suggestion && !state.exitNodeId) {
-                this._addRow(
-                    menu,
-                    _('Suggested: %s').replace('%s', this._suggestion.name),
-                    'starred-symbolic',
-                    () => void this._model.setExitNode(this._suggestion.id),
-                );
-            }
-
-            for (const node of regular)
-                menu.addMenuItem(this._exitNodeItem(node, node.name));
-
-            if (!this._settings.get_boolean(KEYS.SHOW_MULLVAD)) return;
-
-            for (const group of groups) {
-                const label = group.country.flag
-                    ? `${group.country.flag}  ${group.country.name}`
-                    : group.country.name;
-
-                menu.addMenuItem(
-                    new ActionMenuItem(
-                        label,
-                        group.nodes.some(node => node.isExitNode)
-                            ? 'object-select-symbolic'
-                            : '',
-                        () => open(group.country.code),
-                    ),
-                );
-            }
-        }
-
-        /**
-         * The exit node list, split into the tailnet's own candidates and
-         * Mullvad's grouped by country.
-         *
-         * Memoized on the snapshot itself. A snapshot is frozen and replaced
-         * wholesale on every change, so identity is a sound cache key — and
-         * one render asks for this up to three times (the list, the country
-         * rows, and `resolve` when a country is drilled into). On a tailnet
-         * with Mullvad that is several thousand nodes filtered, partitioned
-         * and grouped once instead of three times.
-         *
-         * @param {object} state A snapshot.
-         * @returns {{regular: object[], groups: Array<object>}} The choices.
-         */
-        _exitChoices(state) {
-            if (this._exitChoicesFor !== state) {
-                const { regular, mullvad } = partitionMullvad(
-                    state.nodes.filter(node => node.canBeExitNode),
-                );
-
-                this._exitChoicesFor = state;
-                this._exitChoicesValue = { regular, groups: groupByCountry(mullvad) };
-            }
-
-            return this._exitChoicesValue;
-        }
-
-        /**
-         * Add a row that acts once and lets the menu close.
-         *
-         * The counterpart to ActionMenuItem, which is for the rows whose
-         * result appears in the menu; the choice between the two is the whole
-         * difference, so it stays visible at the call site by which one is
-         * used. `this` owns the connection, so destroy() releases it along
-         * with everything else.
-         *
-         * @param {object} menu The menu to add it to.
-         * @param {string} label What it says.
-         * @param {string} icon Icon name, or '' for none.
-         * @param {Function} onActivate What clicking it does.
-         * @returns {object} The row.
-         */
-        _addRow(menu, label, icon, onActivate) {
-            const item = new PopupMenu.PopupImageMenuItem(label, icon);
-            item.connectObject('activate', onActivate, this);
-            menu.addMenuItem(item);
-
-            return item;
-        }
-
-        /**
-         * @param {object} node A normalized node.
-         * @param {string} label What to call it.
-         * @returns {object} A menu item.
-         */
-        _exitNodeItem(node, label) {
-            const item = new PopupMenu.PopupImageMenuItem(
-                label,
-                node.isExitNode ? 'object-select-symbolic' : node.icon,
-            );
-
-            // Selecting the node in use clears it, so the same row both sets
-            // and unsets without needing a separate "stop" control.
-            item.connectObject(
-                'activate',
-                () => void this._model.setExitNode(node.isExitNode ? '' : node.id),
-                this,
-            );
-
-            return item;
-        }
-
-        /** @param {object} state A snapshot. */
-        _syncDevices(state) {
-            this._devicesGeneration += 1;
-            this._deviceSection.render(state);
-        }
-
-        /**
-         * The device list.
-         *
-         * @param {object} menu The submenu to fill.
-         * @param {object} state A snapshot.
-         * @param {Function} open Drill into a device.
-         */
-        _renderDevices(menu, state, open) {
-            const { _ } = this._i18n;
-
-            const nodes = this._visibleNodes(state);
-
-            if (nodes.length === 0) {
-                addDisabledRow(menu, _('No devices'));
-                return;
-            }
-
-            for (const node of nodes)
-                menu.addMenuItem(
-                    new ActionMenuItem(node.name, node.icon, () => open(node.id)),
-                );
-        }
-
-        /**
-         * The devices the preferences say to list.
-         *
-         * @param {object} state A snapshot.
-         * @returns {object[]} Nodes.
-         */
-        _visibleNodes(state) {
-            const showOffline = this._settings.get_boolean(KEYS.SHOW_OFFLINE_NODES);
-
-            return state.nodes.filter(node => showOffline || node.online);
-        }
-
-        /**
-         * What can be done to one device.
-         *
-         * @param {object} menu The submenu to fill.
-         * @param {object} node A normalized node.
-         * @param {object} state A snapshot.
-         */
-        _renderDeviceActions(menu, node, state) {
-            const { _ } = this._i18n;
-
-            const address = node.ips.at(0) ?? '';
-            const fqdn =
-                node.name && state.magicDNSSuffix
-                    ? `${node.name}.${state.magicDNSSuffix}`
-                    : node.name;
-
-            if (address === '') {
-                addDisabledRow(menu, _('No address'));
-                return;
-            }
-
-            // Stays open: the answer arrives on this row a moment later, and a
-            // closing menu takes it off screen before it can be read.
-            menu.addMenuItem(
-                new ActionMenuItem(
-                    _('Ping'),
-                    'network-transmit-receive-symbolic',
-                    row => void this._pingDevice(node, row),
-                ),
-            );
-
-            this._addRow(menu, _('Copy address'), 'edit-copy-symbolic', () =>
-                copyText(address, this._gicon, this._i18n),
-            );
-
-            if (fqdn && fqdn !== node.name) {
-                this._addRow(menu, _('Copy DNS name'), 'edit-copy-symbolic', () =>
-                    copyText(fqdn, this._gicon, this._i18n),
-                );
-            }
-
-            if (canReceive(node)) {
-                this._addRow(
-                    menu,
-                    _('Send files…'),
-                    'document-send-symbolic',
-                    () => void this._sendFiles(node),
-                );
-            }
-        }
-
-        /**
-         * Ping a device and report the result on the row that asked.
-         *
-         * The answer replaces the row's own label rather than raising an OSD.
-         * A latency is a thing to compare and re-read, and an OSD is gone in a
-         * second and takes the menu's focus with it.
-         *
-         * @param {object} node A normalized node.
-         * @param {object} row The menu item that was activated.
-         * @returns {Promise<void>} Done.
-         */
-        async _pingDevice(node, row) {
-            const { _ } = this._i18n;
-
-            row.label.text = _('Pinging…');
-            row.setSensitive(false);
-
-            const generation = this._devicesGeneration;
-            const result = await this._model.ping(node.ips.at(0) ?? '');
-
-            // The section may have been rebuilt, or the extension disabled,
-            // while the daemon waited for the peer to answer — in which case
-            // this row has been destroyed and writing to it is a GJS critical.
-            if (generation !== this._devicesGeneration) return;
-
-            row.setSensitive(true);
-            // Never _(''): gettext answers the empty string with the
-            // catalog's header.
-            if (result.ok) row.label.text = formatPing(result, this._i18n);
-            else if (result.error) row.label.text = _(result.error);
-            else row.label.text = _('No reply');
-        }
-
-        /**
-         * Rebuild the Taildrop list.
-         *
-         * The eligible targets come from the daemon rather than from the peer
-         * list, so this needs a request; it is issued when the menu opens
-         * rather than on every state change, because nobody can act on a list
-         * they cannot see and asking on each netmap update would be a request
-         * per peer that blinks.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncTaildrop() {
-            const { _ } = this._i18n;
-
-            const generation = ++this._taildropGeneration;
-            const targets = sendTargets(
-                this._model.state.nodes,
-                await this._model.fileTargets(),
-            );
-
-            // A later listing, or a disable, has overtaken this one while the
-            // request was in flight.
-            if (generation !== this._taildropGeneration) return;
-
-            this._taildrop.menu.removeAll();
-            this._taildrop.visible = hasEligibleTarget(targets);
-            if (!this._taildrop.visible) return;
-
-            for (const { node, eligible, reason } of targets) {
-                const item = new PopupMenu.PopupImageMenuItem(
-                    eligible ? node.name : `${node.name} — ${_(reason)}`,
-                    node.icon,
-                );
-
-                if (!eligible) {
-                    item.setSensitive(false);
-                } else {
-                    item.connectObject(
-                        'activate',
-                        () => void this._sendFiles(node),
-                        this,
-                    );
-                }
-
-                this._taildrop.menu.addMenuItem(item);
-            }
-        }
-
-        /**
-         * List the files waiting to be saved.
-         *
-         * Fetched when the menu opens rather than on every state change: the
-         * daemon holds them either way, and a request per netmap blink would
-         * be noise.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncInbox() {
-            const { _n } = this._i18n;
-
-            const generation = ++this._inboxGeneration;
-            const files = await this._model.waitingFiles();
-            if (generation !== this._inboxGeneration) return;
-
-            this._inbox.menu.removeAll();
-            this._inbox.visible = files.length > 0;
-            if (!this._inbox.visible) return;
-
-            this._inbox.label.text = _n(
-                '%d received file',
-                '%d received files',
-                files.length,
-            ).replace('%d', String(files.length));
-
-            for (const file of files)
-                this._inbox.menu.addMenuItem(
-                    new ActionMenuItem(
-                        `${file.name}  ·  ${formatSize(file.size)}`,
-                        'document-save-symbolic',
-                        row => void this._saveFile(file, row),
-                    ),
-                );
-        }
-
-        /**
-         * Save one waiting file, reporting on its own row.
-         *
-         * Stays open, like Ping: the answer is a path, and a path is worth
-         * reading rather than flashing past in an OSD.
-         *
-         * @param {object} file A waiting file.
-         * @param {object} row The row that was activated.
-         * @returns {Promise<void>} Done.
-         */
-        async _saveFile(file, row) {
-            const { _ } = this._i18n;
-
-            const generation = this._inboxGeneration;
-            row.label.text = _('Saving %s…').replace('%s', file.name);
-            row.setSensitive(false);
-
-            const { path, error } = await this._model.saveFile(file.name);
-            if (generation !== this._inboxGeneration) return;
-
-            if (error) {
-                row.setSensitive(true);
-                row.label.text = _(error);
-                return;
-            }
-
-            row.label.text = _('Saved to %s').replace('%s', path);
-            showOsd(this._gicon, _('Saved %s').replace('%s', file.name));
-        }
-
-        /**
-         * Ask the daemon which exit node it would pick.
-         *
-         * Only meaningful while none is chosen, so it is skipped when one is.
-         *
-         * @returns {Promise<void>} Done.
-         */
-        async _syncSuggestion() {
-            const generation = ++this._suggestionGeneration;
-
-            if (this._model.state.exitNodeId) {
-                this._suggestion = null;
-                return;
-            }
-
-            const suggestion = await this._model.suggestedExitNode();
-            if (generation !== this._suggestionGeneration) return;
-
-            // Replaced even when empty. Keeping the previous answer when the
-            // daemon has withdrawn it offers a node it no longer recommends.
-            const had = this._suggestion !== null;
-            this._suggestion = suggestion.id ? suggestion : null;
-            if (had || this._suggestion) this._syncExitNode(this._model.state);
-        }
-
-        /**
-         * Choose files and send them.
-         *
-         * @param {object} node The node to send to.
-         * @returns {Promise<void>} Done.
-         */
-        async _sendFiles(node) {
-            const { _, _n } = this._i18n;
-
-            // Only to a peer the daemon itself names as a target, whichever
-            // row started this. A peer's own TaildropTarget can say available
-            // while the daemon, which decides, does not list it — and asking
-            // first means nobody picks files for a send that cannot happen.
-            if (!isListedTarget(await this._model.fileTargets(), node.id)) {
-                Main.notify(
-                    _('Cannot send to %s').replace('%s', node.name),
-                    _('Tailscale does not list it as able to receive files right now.'),
-                );
-                return;
-            }
-
-            let uris;
-            try {
-                uris = await this._chooseFiles({
-                    title: _('Send to %s').replace('%s', node.name),
-                });
-            } catch (error) {
-                // The portal rejects when xdg-desktop-portal is not installed
-                // or not running. Unhandled, this was an unhandled rejection
-                // and a click that did nothing and said nothing.
-                console.warn(`[quickts] could not open a file chooser: ${error}`);
-                Main.notifyError(
-                    _('Could not open a file chooser'),
-                    _('The desktop portal is not available.'),
-                );
-                return;
-            }
-
-            if (!uris || uris.length === 0) return;
-
-            const { sent, failed } = await this._model.sendFiles(node.id, uris);
-
-            if (sent > 0)
-                showOsd(
-                    this._gicon,
-                    _n('Sent %d file to %s', 'Sent %d files to %s', sent)
-                        .replace('%d', String(sent))
-                        .replace('%s', node.name),
-                );
-
-            // Main.notify, not Main.notifyError: notifyError also copies its
-            // text to the journal, and a node name and file names are
-            // exactly what SECURITY.md promises stay out of it.
-            if (failed.length > 0)
-                Main.notify(
-                    _('Could not send to %s').replace('%s', node.name),
-                    failed.join(', '),
-                );
-        }
-
-        /** @param {object} state A snapshot. */
         _syncOptions(state) {
             for (const { read, item } of this._switches)
                 item.setToggleState(read(state));
@@ -1008,13 +387,14 @@ const QuickTSToggle = GObject.registerClass(
             if (!this._profiles.visible) return;
 
             for (const profile of state.profiles) {
-                this._addRow(
+                addRow(
                     this._profiles.menu,
                     profile.name || profile.tailnet || profile.id,
                     profile.id === state.currentProfileId
                         ? 'object-select-symbolic'
                         : '',
                     () => void this._model.switchProfile(profile.id),
+                    this,
                 );
             }
         }
@@ -1065,7 +445,7 @@ const QuickTSToggle = GObject.registerClass(
             if (!open) {
                 // Reopening should land on the lists, not wherever the last
                 // visit wandered to.
-                const wandered = [this._deviceSection, this._exitSection]
+                const wandered = [this._deviceSection, this._exitNodeSection]
                     .map(section => section.reset())
                     .some(Boolean);
                 if (wandered) this.sync(this._model.state);
@@ -1074,9 +454,9 @@ const QuickTSToggle = GObject.registerClass(
 
             this._applyMaxHeight();
             this._remeasureOnceLaidOut();
-            void this._syncTaildrop();
-            void this._syncInbox();
-            void this._syncSuggestion();
+            void this._sendSection.menuOpened(this._model.state);
+            void this._inboxSection.menuOpened(this._model.state);
+            void this._exitNodeSection.menuOpened(this._model.state);
         }
 
         /**
@@ -1151,10 +531,10 @@ const QuickTSToggle = GObject.registerClass(
         destroy() {
             // Invalidates any async handler still waiting — a ping, a Taildrop
             // listing — so it cannot write into the rows about to be torn down.
-            this._devicesGeneration += 1;
-            this._taildropGeneration += 1;
-            this._inboxGeneration += 1;
-            this._suggestionGeneration += 1;
+            this._deviceSection.destroy();
+            this._sendSection.destroy();
+            this._inboxSection.destroy();
+            this._exitNodeSection.destroy();
 
             this._cancelRemeasure();
 
@@ -1341,152 +721,4 @@ function subtitleFor(state, { _, _n }) {
         default:
             return String(value ?? '');
     }
-}
-
-/**
- * Put text on both clipboards and say so.
- *
- * Both, because X11 applications paste from PRIMARY with the middle button
- * while everything else uses CLIPBOARD, and a person who has just copied an
- * address does not want to think about which.
- *
- * @param {string} text What to copy.
- * @param {object} gicon Icon for the confirmation.
- * @param {{_: Function}} i18n gettext.
- */
-function copyText(text, gicon, { _ }) {
-    if (!text) return;
-
-    const clipboard = St.Clipboard.get_default();
-    clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
-    clipboard.set_text(St.ClipboardType.PRIMARY, text);
-
-    showOsd(gicon, _('Copied %s').replace('%s', text));
-}
-
-/**
- * A row that says something and cannot be activated.
- *
- * @param {object} menu The menu to add it to.
- * @param {string} text What it says.
- */
-function addDisabledRow(menu, text) {
-    const item = new PopupMenu.PopupMenuItem(text);
-    item.setSensitive(false);
-    menu.addMenuItem(item);
-}
-
-/**
- * Flash a message on the primary monitor.
- *
- * GNOME 49 changed OsdWindowManager: show() now takes (icon, label, levels)
- * and showOne() is the call js/ui/windowManager.js itself uses for a text OSD.
- * The signature has moved before, which is why this lives in one function:
- * the next time it moves there is a single call to fix.
- *
- * @param {object} gicon Icon to show beside the message.
- * @param {string} message What to say.
- */
-function showOsd(gicon, message) {
-    Main.osdWindowManager.showOne(Main.layoutManager.primaryIndex, gicon, message);
-}
-
-/**
- * One health warning.
- *
- * The text wraps rather than ellipsizing. These messages are whole sentences
- * and the menu is barely wider than one line of them, so a single line with a
- * trailing ellipsis shows the reader the least useful half of the warning.
- *
- * A message that carries a link becomes activatable and the link is taken out
- * of the text, which is both the longest part of the message and the part
- * least worth reading in a menu.
- *
- * @param {string} line One line from the daemon's health list.
- * @returns {object} A menu item.
- */
-function warningRow(line) {
-    const { text, url } = describeWarning(line);
-    const item = new PopupMenu.PopupImageMenuItem(
-        text,
-        url ? 'web-browser-symbolic' : 'dialog-warning-symbolic',
-    );
-
-    item.label.x_expand = true;
-    item.label.clutter_text.line_wrap = true;
-    item.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-    item.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-
-    if (!url) {
-        item.setSensitive(false);
-        return item;
-    }
-
-    item.connectObject('activate', () => openUri(url), item);
-
-    return item;
-}
-
-/**
- * Hand a URI to whichever application claims it, the way the Shell does.
- *
- * With a launch context, as js/ui/messageList.js opens a link, so the browser
- * gets startup notification and lands on the current workspace. And caught:
- * GIO throws when nothing handles the scheme, and the login URL is opened from
- * inside sync(), where an exception would abandon the rest of the menu.
- *
- * @param {string} uri An http or https URI, already checked by the caller.
- */
-function openUri(uri) {
-    try {
-        Gio.AppInfo.launch_default_for_uri(
-            uri,
-            global.create_app_launch_context(0, -1),
-        );
-    } catch (error) {
-        console.warn(`[quickts] could not open a browser: ${error.message ?? error}`);
-    }
-}
-
-/**
- * A ping result, as a row label.
- *
- * The route matters as much as the number on a tailnet: the same peer at the
- * same latency is a different situation depending on whether the packets went
- * straight there or through one of Tailscale's relays.
- *
- * Each case is one whole template, so a translator sees the sentence rather
- * than fragments glued together with a comma this code chose.
- *
- * @param {object} result From modules/ping.js.
- * @param {{_: Function}} i18n gettext.
- * @returns {string} A label.
- */
-function formatPing(result, { _ }) {
-    const latency = String(result.latencyMs);
-
-    if (result.route === ROUTE.DIRECT) return _('%s ms, direct').replace('%s', latency);
-    if (result.route === ROUTE.RELAY && result.relay)
-        return _('%s ms, relayed via %s')
-            .replace('%s', latency)
-            .replace('%s', result.relay);
-    if (result.route === ROUTE.RELAY) return _('%s ms, relayed').replace('%s', latency);
-
-    return _('%s ms').replace('%s', latency);
-}
-
-/**
- * What to call the exit node section.
- *
- * An exit node chosen automatically has an id of the form "auto:any", which
- * names no peer, so there is a node in use and no name for it.
- *
- * @param {object} state A snapshot.
- * @param {{_: Function}} i18n gettext.
- * @returns {string} A label.
- */
-function exitNodeLabel(state, { _ }) {
-    if (state.exitNodeName) return _('Exit node: %s').replace('%s', state.exitNodeName);
-
-    return state.exitNodeId ? _('Exit node: automatic') : _('Exit node');
 }

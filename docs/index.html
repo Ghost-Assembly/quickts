@@ -1269,14 +1269,15 @@
                     <h2 id="architecture-title">Architecture</h2>
                     <p>
                         Every decision lives in a pure module that imports nothing from
-                        GNOME, so the suite tests them on plain Node. Four files touch
-                        <code>gi://</code> or <code>resource:///</code>, and they only
-                        carry decisions out.
+                        GNOME, so the suite tests them on plain Node. The files that
+                        touch
+                        <code>gi://</code> or <code>resource:///</code> only carry
+                        decisions out.
                     </p>
                     <div
                         class="diagram"
                         role="img"
-                        aria-label="tailscaled's LocalAPI is reached through modules/io.js, which modules/model.js drives; modules/panel.js subscribes to model.js and draws what it is told."
+                        aria-label="tailscaled's LocalAPI is reached through modules/io.js, which modules/model.js drives; modules/panel.js subscribes to model.js and draws what it is told, through one module per menu section."
                     >
                         <div class="node">
                             <b>tailscaled</b
@@ -1340,8 +1341,23 @@
                         ></span>
                         <div class="node">
                             <b>panel.js</b
-                            ><span>The tile, its menu and the keybinding.</span>
+                            ><span
+                                >The tile, the keybinding, and the menu sections it
+                                builds.</span
+                            >
                         </div>
+                    </div>
+                    <div class="node wide">
+                        <b
+                            >exit-node-section.js · device-section.js ·
+                            taildrop-section.js</b
+                        ><span
+                            >One plain class per menu section, each with its own rows
+                            and its own generation counter, built from menu-items.js and
+                            navigable-section.js. The toggle builds them, passes what
+                            they need and tells them when the state moves or the menu
+                            opens.</span
+                        >
                     </div>
                     <div class="node wide">
                         <b>extension.js · prefs.js</b
@@ -1390,8 +1406,8 @@
                         preferences, so the tick follows the click rather than lagging
                         the network, and a node shared in from another tailnet keeps
                         enough of its name to stay distinguishable. Pure modules decide;
-                        <code>modules/panel.js</code> chooses the wording, so
-                        translators see whole sentences.
+                        <code>modules/panel.js</code> and its section modules choose the
+                        wording, so translators see whole sentences.
                     </p>
                 </section>
 
