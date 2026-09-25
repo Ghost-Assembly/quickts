@@ -13,7 +13,6 @@
 
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -44,55 +43,16 @@ import {
     sendTargets,
 } from './taildrop.js';
 import { formatSize } from './inbox.js';
-import { describeWarning } from './warnings.js';
-
-/**
- * A row that acts without closing the menu.
- *
- * PopupMenuBase connects to every item's 'activate' with ConnectFlags.AFTER
- * and calls itemActivated(), which closes the top menu — so by default a click
- * anywhere dismisses the whole panel. That is right for a row whose job is
- * finished once it is clicked, like copying an address or picking an exit
- * node, and wrong for one whose result appears in the menu, or that navigates
- * within it.
- *
- * Declining to chain up is how gnome-shell itself keeps a menu open: it is
- * what PopupSwitchMenuItem does for the space key.
- */
-const ActionMenuItem = GObject.registerClass(
-    class QuickTSActionMenuItem extends PopupMenu.PopupImageMenuItem {
-        _init(text, icon, onActivate) {
-            super._init(text, icon);
-            this._onActivate = onActivate;
-        }
-
-        /**
-         * @param {object} _event Unused; the row is the only context needed.
-         */
-        activate(_event) {
-            this._onActivate(this);
-        }
-    },
-);
-
-/**
- * A switch that does not dismiss the menu when it is flipped.
- *
- * Turning on accept-routes and then accept-DNS should not mean two trips
- * through the panel. gnome-shell already allows this from the keyboard —
- * PopupSwitchMenuItem returns early for the space key — and this extends the
- * same behavior to the pointer.
- */
-const StayOpenSwitchMenuItem = GObject.registerClass(
-    class QuickTSSwitchMenuItem extends PopupMenu.PopupSwitchMenuItem {
-        /**
-         * @param {object} _event Unused; toggling is the whole action.
-         */
-        activate(_event) {
-            this.toggle();
-        }
-    },
-);
+import {
+    ActionMenuItem,
+    StayOpenSwitchMenuItem,
+    addDisabledRow,
+    addRow,
+    copyText,
+    openUri,
+    showOsd,
+    warningRow,
+} from './menu-items.js';
 
 /**
  * A submenu that shows either a list or the detail of one entry in it.
@@ -496,11 +456,12 @@ const QuickTSToggle = GObject.registerClass(
             }
 
             if (needsLogin(state)) {
-                this._addRow(
+                addRow(
                     this._problems,
                     _('Log in…'),
                     'avatar-default-symbolic',
                     () => this._startLogin(),
+                    this,
                 );
             }
         }
@@ -556,21 +517,23 @@ const QuickTSToggle = GObject.registerClass(
 
             const { regular, groups } = this._exitChoices(state);
 
-            this._addRow(
+            addRow(
                 menu,
                 _('None'),
                 state.exitNodeId ? '' : 'object-select-symbolic',
                 () => void this._model.setExitNode(''),
+                this,
             );
 
             // The daemon's own recommendation, offered only while nothing is
             // chosen — once one is in use, a suggestion is just noise.
             if (this._suggestion && !state.exitNodeId) {
-                this._addRow(
+                addRow(
                     menu,
                     _('Suggested: %s').replace('%s', this._suggestion.name),
                     'starred-symbolic',
                     () => void this._model.setExitNode(this._suggestion.id),
+                    this,
                 );
             }
 
@@ -621,29 +584,6 @@ const QuickTSToggle = GObject.registerClass(
             }
 
             return this._exitChoicesValue;
-        }
-
-        /**
-         * Add a row that acts once and lets the menu close.
-         *
-         * The counterpart to ActionMenuItem, which is for the rows whose
-         * result appears in the menu; the choice between the two is the whole
-         * difference, so it stays visible at the call site by which one is
-         * used. `this` owns the connection, so destroy() releases it along
-         * with everything else.
-         *
-         * @param {object} menu The menu to add it to.
-         * @param {string} label What it says.
-         * @param {string} icon Icon name, or '' for none.
-         * @param {Function} onActivate What clicking it does.
-         * @returns {object} The row.
-         */
-        _addRow(menu, label, icon, onActivate) {
-            const item = new PopupMenu.PopupImageMenuItem(label, icon);
-            item.connectObject('activate', onActivate, this);
-            menu.addMenuItem(item);
-
-            return item;
         }
 
         /**
@@ -740,22 +680,31 @@ const QuickTSToggle = GObject.registerClass(
                 ),
             );
 
-            this._addRow(menu, _('Copy address'), 'edit-copy-symbolic', () =>
-                copyText(address, this._gicon, this._i18n),
+            addRow(
+                menu,
+                _('Copy address'),
+                'edit-copy-symbolic',
+                () => copyText(address, this._gicon, this._i18n),
+                this,
             );
 
             if (fqdn && fqdn !== node.name) {
-                this._addRow(menu, _('Copy DNS name'), 'edit-copy-symbolic', () =>
-                    copyText(fqdn, this._gicon, this._i18n),
+                addRow(
+                    menu,
+                    _('Copy DNS name'),
+                    'edit-copy-symbolic',
+                    () => copyText(fqdn, this._gicon, this._i18n),
+                    this,
                 );
             }
 
             if (canReceive(node)) {
-                this._addRow(
+                addRow(
                     menu,
                     _('Send files…'),
                     'document-send-symbolic',
                     () => void this._sendFiles(node),
+                    this,
                 );
             }
         }
@@ -1008,13 +957,14 @@ const QuickTSToggle = GObject.registerClass(
             if (!this._profiles.visible) return;
 
             for (const profile of state.profiles) {
-                this._addRow(
+                addRow(
                     this._profiles.menu,
                     profile.name || profile.tailnet || profile.id,
                     profile.id === state.currentProfileId
                         ? 'object-select-symbolic'
                         : '',
                     () => void this._model.switchProfile(profile.id),
+                    this,
                 );
             }
         }
@@ -1340,111 +1290,6 @@ function subtitleFor(state, { _, _n }) {
             return _n('%d warning', '%d warnings', value).replace('%d', String(value));
         default:
             return String(value ?? '');
-    }
-}
-
-/**
- * Put text on both clipboards and say so.
- *
- * Both, because X11 applications paste from PRIMARY with the middle button
- * while everything else uses CLIPBOARD, and a person who has just copied an
- * address does not want to think about which.
- *
- * @param {string} text What to copy.
- * @param {object} gicon Icon for the confirmation.
- * @param {{_: Function}} i18n gettext.
- */
-function copyText(text, gicon, { _ }) {
-    if (!text) return;
-
-    const clipboard = St.Clipboard.get_default();
-    clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
-    clipboard.set_text(St.ClipboardType.PRIMARY, text);
-
-    showOsd(gicon, _('Copied %s').replace('%s', text));
-}
-
-/**
- * A row that says something and cannot be activated.
- *
- * @param {object} menu The menu to add it to.
- * @param {string} text What it says.
- */
-function addDisabledRow(menu, text) {
-    const item = new PopupMenu.PopupMenuItem(text);
-    item.setSensitive(false);
-    menu.addMenuItem(item);
-}
-
-/**
- * Flash a message on the primary monitor.
- *
- * GNOME 49 changed OsdWindowManager: show() now takes (icon, label, levels)
- * and showOne() is the call js/ui/windowManager.js itself uses for a text OSD.
- * The signature has moved before, which is why this lives in one function:
- * the next time it moves there is a single call to fix.
- *
- * @param {object} gicon Icon to show beside the message.
- * @param {string} message What to say.
- */
-function showOsd(gicon, message) {
-    Main.osdWindowManager.showOne(Main.layoutManager.primaryIndex, gicon, message);
-}
-
-/**
- * One health warning.
- *
- * The text wraps rather than ellipsizing. These messages are whole sentences
- * and the menu is barely wider than one line of them, so a single line with a
- * trailing ellipsis shows the reader the least useful half of the warning.
- *
- * A message that carries a link becomes activatable and the link is taken out
- * of the text, which is both the longest part of the message and the part
- * least worth reading in a menu.
- *
- * @param {string} line One line from the daemon's health list.
- * @returns {object} A menu item.
- */
-function warningRow(line) {
-    const { text, url } = describeWarning(line);
-    const item = new PopupMenu.PopupImageMenuItem(
-        text,
-        url ? 'web-browser-symbolic' : 'dialog-warning-symbolic',
-    );
-
-    item.label.x_expand = true;
-    item.label.clutter_text.line_wrap = true;
-    item.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-    item.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-
-    if (!url) {
-        item.setSensitive(false);
-        return item;
-    }
-
-    item.connectObject('activate', () => openUri(url), item);
-
-    return item;
-}
-
-/**
- * Hand a URI to whichever application claims it, the way the Shell does.
- *
- * With a launch context, as js/ui/messageList.js opens a link, so the browser
- * gets startup notification and lands on the current workspace. And caught:
- * GIO throws when nothing handles the scheme, and the login URL is opened from
- * inside sync(), where an exception would abandon the rest of the menu.
- *
- * @param {string} uri An http or https URI, already checked by the caller.
- */
-function openUri(uri) {
-    try {
-        Gio.AppInfo.launch_default_for_uri(
-            uri,
-            global.create_app_launch_context(0, -1),
-        );
-    } catch (error) {
-        console.warn(`[quickts] could not open a browser: ${error.message ?? error}`);
     }
 }
 
