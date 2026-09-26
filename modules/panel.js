@@ -504,13 +504,24 @@ const QuickTSToggle = GObject.registerClass(
          * nothing.
          */
         _remeasureOnceLaidOut() {
+            // A second request before the first fires must not leave both
+            // outstanding: the first's own later would then be scheduled
+            // under a `this._laterId` the second is about to overwrite, and
+            // a _cancelRemeasure() landing before either fires — the menu
+            // closing again first — would remove only the later `_laterId`
+            // still names, leaking the first's forever. Canceling whatever
+            // is pending before starting a new one keeps at most one of each
+            // outstanding at a time.
+            this._cancelRemeasure();
+
             const actor = this.menu.actor;
 
             // Captured in this closure rather than read back off
-            // this._allocationId at fire time: a second request before this
-            // one fires overwrites that field, and disconnecting whatever it
-            // holds by then would release the SECOND handler instead of this
-            // one — leaving this one connected to 'notify::allocation' forever.
+            // this._allocationId at fire time: with the guard above, a
+            // second request can only run after this one either fired or was
+            // canceled — but reading the field back would still be wrong the
+            // moment a future caller skips _cancelRemeasure like this one
+            // used to, so this stays the belt to that guard's suspenders.
             const allocationId = actor.connect('notify::allocation', () => {
                 actor.disconnect(allocationId);
                 // Only clear the field if it is still this request's — an
