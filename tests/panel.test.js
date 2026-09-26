@@ -10,6 +10,7 @@ import { launchContexts, launchFailure, launchedUris } from './stubs/gi-gio.js';
 import { clipboard, themeContext } from './stubs/gi-st.js';
 import * as Main from './stubs/shell-main.js';
 import { descendants, liveHandlers } from './support/actors.js';
+import { extractableMsgids } from './support/i18n.js';
 import { createSettings } from './support/world.js';
 import {
     deviceActionRows,
@@ -330,6 +331,37 @@ describe('problems and warnings', () => {
         await settle();
 
         expect(toggleOf()._problems.items.map(item => item.text)).toContain('Log in…');
+    });
+
+    // The problem row and the subtitle both word an unreachable daemon from
+    // modules/errors.js's already-composed English (messageFor), and passing
+    // that straight to _() asks gettext to translate a sentence it can never
+    // see when the .pot file is built — only a literal string reaches
+    // xgettext. Every message this scenario hands to gettext must be one.
+    it('words the problem row and subtitle only in strings a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        daemon.failures.set('/localapi/v0/', {
+            name: 'TransportError',
+            reason: REASON.PERMISSION_DENIED,
+        });
+
+        asked.length = 0;
+        panel.enable();
+        await model.start();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
+
+        expect(
+            toggleOf()._problems.items.some(item =>
+                item.text?.includes('tailscale set --operator='),
+            ),
+        ).toBe(true);
+        expect(toggleOf().subtitle).toContain('tailscale set --operator=');
     });
 
     it('offers a login row when the backend needs one', async () => {

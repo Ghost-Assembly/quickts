@@ -158,8 +158,9 @@ export function summaryOf(state) {
  * a command nobody would otherwise discover from an empty menu.
  *
  * @param {object} state A snapshot.
- * @returns {{message: string, command: string, actionable: boolean}|null} What
- *   to say, the command that fixes it if there is one, or null if fine.
+ * @returns {{reason: string, message: string, command: string, actionable: boolean}|null}
+ *   The reason, untranslated for a log and as a key for modules/panel.js to
+ *   translate, the command that fixes it if there is one, or null if fine.
  */
 export function problemOf(state) {
     if (state.reachable) return null;
@@ -167,6 +168,7 @@ export function problemOf(state) {
     const reason = state.errorReason || REASON.UNKNOWN;
 
     return {
+        reason,
         message: messageFor(reason),
         command: commandFor(reason),
         actionable: isActionable(reason),

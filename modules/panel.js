@@ -42,6 +42,7 @@ import {
     addRow,
     copyText,
     openUri,
+    problemMessage,
     warningRow,
 } from './menu-items.js';
 import { ExitNodeSection } from './exit-node-section.js';
@@ -308,7 +309,7 @@ const QuickTSToggle = GObject.registerClass(
             const problem = problemOf(state);
             if (problem) {
                 const item = new PopupMenu.PopupImageMenuItem(
-                    _(problem.message),
+                    problemMessage(problem.reason, _),
                     problem.actionable
                         ? 'dialog-warning-symbolic'
                         : 'network-offline-symbolic',
@@ -709,7 +710,7 @@ function subtitleFor(state, { _, _n }) {
 
     switch (kind) {
         case SUMMARY.ERROR:
-            return _(problemOf(state)?.message ?? 'Not connected');
+            return problemMessage(value, _);
         case SUMMARY.NEEDS_LOGIN:
             return _('Not logged in');
         case SUMMARY.IN_USE:

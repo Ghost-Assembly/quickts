@@ -123,10 +123,15 @@ export function sendTargets(nodes, fileTargets) {
  * file-targets has no more specific explanation to offer than that it cannot
  * be reached right now.
  *
+ * Exported so modules/taildrop-section.js can translate the status itself
+ * rather than gettext being asked to translate the English reasonFor()
+ * already composed for {@link sendTargets}'s `reason` field, which is never a
+ * literal in the source.
+ *
  * @param {object} node A normalized node.
  * @returns {number} A TaildropTargetStatus.
  */
-function unlistedReason(node) {
+export function unlistedReason(node) {
     return canReceive(node) ? TAILDROP.NO_PEER_API : node.taildropTarget;
 }
 

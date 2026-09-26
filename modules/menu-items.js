@@ -12,6 +12,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import { REASON, commandFor } from './errors.js';
 import { describeWarning } from './warnings.js';
 
 /**
@@ -105,6 +106,37 @@ export function copyText(text, gicon, { _ }) {
     clipboard.set_text(St.ClipboardType.PRIMARY, text);
 
     showOsd(gicon, _('Copied %s').replace('%s', text));
+}
+
+/**
+ * The sentence for a daemon problem, translated.
+ *
+ * modules/errors.js decides the reason; the wording is chosen here, next to
+ * gettext, where a translator sees a whole, literal sentence per case.
+ * Passing modules/errors.js's own messageFor(reason) straight to `_()` — what
+ * this replaced, in modules/panel.js and modules/taildrop-section.js — asks
+ * gettext to translate a sentence composed at run time, which is never a
+ * literal in the source and so is invisible to xgettext.
+ *
+ * @param {string} reason One of REASON from modules/errors.js.
+ * @param {Function} _ gettext.
+ * @returns {string} A sentence for the menu.
+ */
+export function problemMessage(reason, _) {
+    switch (reason) {
+        case REASON.SOCKET_MISSING:
+            return _('Tailscale is not installed, or has never been started.');
+        case REASON.CONNECTION_REFUSED:
+            return _('The Tailscale daemon is not running.');
+        case REASON.PERMISSION_DENIED:
+            return _('Not permitted. Run: %s').replace('%s', commandFor(reason));
+        case REASON.HTTP:
+            return _('The Tailscale daemon refused the request.');
+        case REASON.PROTOCOL:
+            return _('The Tailscale daemon sent an unexpected response.');
+        default:
+            return _('Could not reach the Tailscale daemon.');
+    }
 }
 
 /**

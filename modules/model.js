@@ -294,15 +294,17 @@ export class TailscaleModel {
      * In that order. Deleting first loses the file if the write fails.
      *
      * @param {string} name The name as the daemon lists it.
-     * @returns {Promise<{path: string, error: string}>} Where it went, or why not.
+     * @returns {Promise<{path: string, error: string}>} Where it went, or a
+     *   REASON from modules/errors.js if it did not — untranslated, so
+     *   modules/taildrop-section.js can turn it into a literal `_()` call
+     *   rather than being handed English composed at run time.
      */
     async saveFile(name) {
         if (this.#disposed) return { path: '', error: '' };
 
         // The daemon listed a name that cannot be a plain file here. It is
         // left on the daemon, where `tailscale file get` can still reach it.
-        if (!isSafeFileName(name))
-            return { path: '', error: messageFor(REASON.PROTOCOL) };
+        if (!isSafeFileName(name)) return { path: '', error: REASON.PROTOCOL };
 
         try {
             const path = await this.#client.saveFile(getFileRequest(name), name);
@@ -312,7 +314,7 @@ export class TailscaleModel {
         } catch (error) {
             if (isCanceled(error)) return { path: '', error: '' };
 
-            return { path: '', error: messageFor(reasonOf(error)) };
+            return { path: '', error: reasonOf(error) };
         }
     }
 

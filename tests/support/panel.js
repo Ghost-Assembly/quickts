@@ -13,7 +13,12 @@ import { createClock, createDaemon, createScheduler } from './daemon.js';
 import { createSettings } from './world.js';
 
 /** Build a panel over a fake daemon, ready to enable. */
-export function setup({ seed, settings = createSettings(), chooseFiles } = {}) {
+export function setup({
+    seed,
+    settings = createSettings(),
+    chooseFiles,
+    gettext = message => message,
+} = {}) {
     const daemon = createDaemon(seed);
     const clock = createClock();
     const { scheduler } = createScheduler(daemon.token, clock);
@@ -28,7 +33,7 @@ export function setup({ seed, settings = createSettings(), chooseFiles } = {}) {
         model,
         settings,
         iconPath: '/nonexistent/quickts/icons/quickts-symbolic.svg',
-        gettext: message => message,
+        gettext,
         chooseFiles:
             chooseFiles ??
             (options => {

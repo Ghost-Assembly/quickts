@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { REASON } from '../modules/errors.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import * as Main from './stubs/shell-main.js';
+import { extractableMsgids } from './support/i18n.js';
 import { settle, setup, toggleOf, useShellStubs } from './support/panel.js';
 
 useShellStubs();
@@ -97,6 +98,35 @@ describe('received files', () => {
         expect(row.sensitive).toBe(true);
         expect(row.text).toMatch(/\S/);
     });
+
+    // modules/model.js's saveFile used to hand this row modules/errors.js's
+    // already-composed English (messageFor), and _(error) then asked gettext
+    // to translate a sentence it can never see when the .pot file is built —
+    // only a literal string reaches xgettext.
+    it('words a failed save only in a string a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        withFiles(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        daemon.failures.set('/localapi/v0/files/report.pdf', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        asked.length = 0;
+        toggleOf()._inbox.menu.items.at(0).activate();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
+    });
 });
 
 describe('the file chooser failing', () => {
@@ -176,6 +206,31 @@ describe('taildrop', () => {
 
         expect(row.text).toContain('Offline');
         expect(row.sensitive).toBe(false);
+    });
+
+    // modules/taildrop.js's reasonFor composes the English directly, and
+    // handing it to _(reason) — what this replaced — asks gettext to
+    // translate a sentence it can never see when the .pot file is built.
+    it('words an ineligible node only in a string a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        withTarget(daemon);
+        daemon.responses.status.Peer = rawPeerMap(
+            rawPeer({ TaildropTarget: 1 }),
+            rawPeer({ ID: 'nOFF', DNSName: `sleeper.${SUFFIX}.`, TaildropTarget: 5 }),
+        );
+        panel.enable();
+        await model.start();
+        await settle();
+
+        asked.length = 0;
+        toggleOf().menu.open();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
     });
 
     it('asks for files and sends them', async () => {
