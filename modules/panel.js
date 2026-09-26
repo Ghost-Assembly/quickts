@@ -505,9 +505,16 @@ const QuickTSToggle = GObject.registerClass(
         _remeasureOnceLaidOut() {
             const actor = this.menu.actor;
 
-            this._allocationId = actor.connect('notify::allocation', () => {
-                actor.disconnect(this._allocationId);
-                this._allocationId = 0;
+            // Captured in this closure rather than read back off
+            // this._allocationId at fire time: a second request before this
+            // one fires overwrites that field, and disconnecting whatever it
+            // holds by then would release the SECOND handler instead of this
+            // one — leaving this one connected to 'notify::allocation' forever.
+            const allocationId = actor.connect('notify::allocation', () => {
+                actor.disconnect(allocationId);
+                // Only clear the field if it is still this request's — an
+                // overlapping second request has already moved it on.
+                if (this._allocationId === allocationId) this._allocationId = 0;
 
                 this._laterId = global.compositor
                     .get_laters()
@@ -517,6 +524,8 @@ const QuickTSToggle = GObject.registerClass(
                         return false;
                     });
             });
+
+            this._allocationId = allocationId;
         }
 
         /** Drop a re-measure that has not happened yet. */

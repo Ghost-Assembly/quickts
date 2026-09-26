@@ -571,6 +571,31 @@ describe('menu height', () => {
         expect(setMenuOpen).toHaveBeenCalledWith(true);
         expect(setMenuOpen).toHaveBeenCalledWith(false);
     });
+
+    // _onOpenStateChanged always cancels a pending remeasure before starting
+    // another, so this can only happen if _remeasureOnceLaidOut is ever asked
+    // for twice without that — the next call site to forget it, or two opens
+    // racing each other before _cancelRemeasure runs between them. The bug:
+    // the allocation handler read `this._allocationId` at fire time rather
+    // than the id it was actually given, so a second request overwrote the
+    // field before the first fired, and the first's own disconnect call then
+    // disconnected the SECOND handler instead of itself — leaving the first
+    // connected to 'notify::allocation' forever.
+    it('does not leak a handler when a remeasure is requested twice before it fires', async () => {
+        const { panel, model } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+
+        const before = liveHandlers.size;
+
+        toggleOf()._remeasureOnceLaidOut();
+        toggleOf()._remeasureOnceLaidOut();
+        toggleOf().menu.actor.emit('notify::allocation');
+        runLaters();
+
+        expect(liveHandlers.size).toBe(before);
+    });
 });
 
 describe('the keybinding', () => {
