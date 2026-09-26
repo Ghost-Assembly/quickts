@@ -1,12 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { REASON } from '../modules/errors.js';
+import { taildropReason } from '../modules/taildrop-section.js';
+import { TAILDROP } from '../modules/taildrop.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import * as Main from './stubs/shell-main.js';
 import { extractableMsgids } from './support/i18n.js';
 import { settle, setup, toggleOf, useShellStubs } from './support/panel.js';
 
 useShellStubs();
+
+// Every branch, the same way tests/taildrop.test.js exercises reasonFor's:
+// taildropReason mirrors it, but through a literal _() call per case.
+describe('taildropReason', () => {
+    it.each(Object.values(TAILDROP))('says something for status %i', status => {
+        expect(taildropReason(status, message => message)).toMatch(/\S/);
+    });
+
+    it('gives the same reason to every status the daemon means "unreachable" by', () => {
+        const unreachable = [
+            TAILDROP.NO_PEER_API,
+            TAILDROP.NO_PEER_INFO,
+            TAILDROP.NO_NETMAP,
+        ];
+
+        const reasons = new Set(
+            unreachable.map(status => taildropReason(status, message => message)),
+        );
+
+        expect(reasons.size).toBe(1);
+    });
+});
 
 describe('received files', () => {
     const withFiles = daemon => {

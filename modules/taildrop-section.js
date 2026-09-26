@@ -26,11 +26,14 @@ import { ActionMenuItem, problemMessage, showOsd } from './menu-items.js';
  * a literal string reaches xgettext, rather than handing gettext the English
  * reasonFor already built.
  *
+ * Exported for a direct test over every status, the same way
+ * modules/taildrop.js's own reasonFor is tested.
+ *
  * @param {number} status A TaildropTargetStatus.
  * @param {Function} _ gettext.
  * @returns {string} A reason.
  */
-function taildropReason(status, _) {
+export function taildropReason(status, _) {
     switch (status) {
         case TAILDROP.OFFLINE:
             return _('Offline');
