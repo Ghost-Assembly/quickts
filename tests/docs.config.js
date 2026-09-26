@@ -3,7 +3,7 @@
 
 export default {
     title: 'QuickTS',
-    site: 'https://ghost-assembly.github.io/quickts/',
+    site: 'https://ghost-assembly.com/quickts/',
     repo: 'https://github.com/Ghost-Assembly/quickts',
 
     // [id, heading], in page order. The contents list must match.
@@ -12,7 +12,7 @@ export default {
         ['install', 'Install'],
         ['menu', 'The menu'],
         ['preferences', 'Preferences'],
-        ['keyboard', 'Keyboard shortcut'],
+        ['keyboard', 'Keyboard'],
         ['security', 'Security'],
         ['architecture', 'Architecture'],
         ['localapi', 'The LocalAPI'],

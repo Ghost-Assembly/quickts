@@ -1,7 +1,7 @@
 {
     "uuid": "quickts@napalm255.github.io",
     "name": "QuickTS",
-    "description": "Tailscale in the quick settings menu. Toggle the tailnet, pick an exit node, switch profiles, copy a node address and send files over Taildrop, without leaving the panel.\n\nRequires that you are the tailscale operator:\nsudo tailscale set --operator=$USER",
+    "description": "Tailscale in Quick Settings: toggle the tailnet, pick an exit node, switch profiles, ping nodes and send or receive Taildrop files.\n\nRequires that you are the tailscale operator:\nsudo tailscale set --operator=$USER",
     "shell-version": ["50"],
     "url": "https://github.com/Ghost-Assembly/quickts",
     "settings-schema": "org.gnome.shell.extensions.quickts",

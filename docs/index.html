@@ -6,7 +6,7 @@
         <title>QuickTS · Ghost Assembly</title>
         <meta
             name="description"
-            content="QuickTS puts Tailscale in the GNOME quick settings menu: toggle the tailnet, pick an exit node, switch profiles, ping a device and send or receive files over Taildrop, without leaving the panel."
+            content="QuickTS puts Tailscale in the GNOME Quick Settings menu: toggle the tailnet, pick an exit node, switch profiles, ping a device and send or receive files over Taildrop, without leaving the panel."
         />
         <meta name="color-scheme" content="dark light" />
         <meta name="theme-color" content="#03030a" />
@@ -27,12 +27,12 @@
         <meta property="og:title" content="QuickTS" />
         <meta
             property="og:description"
-            content="Tailscale in the GNOME quick settings menu."
+            content="Tailscale in Quick Settings: toggle the tailnet, pick an exit node, switch profiles, ping nodes and send or receive Taildrop files."
         />
-        <meta property="og:url" content="https://ghost-assembly.github.io/quickts/" />
+        <meta property="og:url" content="https://ghost-assembly.com/quickts/" />
         <meta
             property="og:image"
-            content="https://ghost-assembly.github.io/quickts/assets/og-image.png"
+            content="https://ghost-assembly.com/quickts/assets/og-image.png"
         />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -89,7 +89,11 @@
                 <div>
                     <p class="eyebrow">GNOME Shell extension</p>
                     <h1 id="title">QuickTS</h1>
-                    <p class="tagline">Tailscale in the GNOME quick settings menu.</p>
+                    <p class="tagline">
+                        Tailscale in Quick Settings: toggle the tailnet, pick an exit
+                        node, switch profiles, ping nodes and send or receive Taildrop
+                        files.
+                    </p>
                     <p class="lede">
                         Toggle the tailnet, pick an exit node, switch profiles, ping a
                         device, copy its address and send or receive files over Taildrop
@@ -483,9 +487,7 @@
                         <a href="#preferences"><span class="n">04</span>Preferences</a>
                     </li>
                     <li>
-                        <a href="#keyboard"
-                            ><span class="n">05</span>Keyboard shortcut</a
-                        >
+                        <a href="#keyboard"><span class="n">05</span>Keyboard</a>
                     </li>
                     <li>
                         <a href="#security"><span class="n">06</span>Security</a>
@@ -555,7 +557,7 @@
                         >
                     </li>
                     <li>
-                        <a href="https://ghost-assembly.github.io/">
+                        <a href="https://ghost-assembly.com/">
                             <svg
                                 width="15"
                                 height="15"
@@ -610,9 +612,7 @@
                             >
                         </li>
                         <li>
-                            <a href="#keyboard"
-                                ><span class="n">05</span>Keyboard shortcut</a
-                            >
+                            <a href="#keyboard"><span class="n">05</span>Keyboard</a>
                         </li>
                         <li>
                             <a href="#security"><span class="n">06</span>Security</a>
@@ -648,7 +648,7 @@
                     <p class="kicker">01</p>
                     <h2 id="overview-title">Overview</h2>
                     <p class="lead">
-                        QuickTS adds one tile to quick settings. Clicking it brings the
+                        QuickTS adds one tile to Quick Settings. Clicking it brings the
                         tailnet up or down — or starts a login, if the daemon is waiting
                         for one — and its arrow opens everything else. It talks to
                         <code>tailscaled</code> the way the <code>tailscale</code>
@@ -1101,7 +1101,7 @@
                                 <td data-label="Setting">Open the menu</td>
                                 <td data-label="Default">Unbound</td>
                                 <td data-label="Notes" class="muted">
-                                    See <a href="#keyboard">Keyboard shortcut</a>.
+                                    See <a href="#keyboard">Keyboard</a>.
                                 </td>
                             </tr>
                         </tbody>
@@ -1134,9 +1134,9 @@
 
                 <section class="section" id="keyboard" aria-labelledby="keyboard-title">
                     <p class="kicker">05</p>
-                    <h2 id="keyboard-title">Keyboard shortcut</h2>
+                    <h2 id="keyboard-title">Keyboard</h2>
                     <p>
-                        One shortcut opens quick settings with QuickTS expanded. It is
+                        One shortcut opens Quick Settings with QuickTS expanded. It is
                         unbound by default, so it cannot collide with a GNOME shortcut;
                         choose one in the preferences window, which records the next key
                         combination you press.
@@ -1367,6 +1367,295 @@
                             field.</span
                         >
                     </div>
+                    <h3>Every module</h3>
+                    <p>
+                        The diagram above shows the main ones. Every file under
+                        <code>modules/</code>, what it decides, and which other modules
+                        it imports — everything not listed here imports nothing of its
+                        own:
+                    </p>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Module</th>
+                                <th scope="col">Job</th>
+                                <th scope="col">Imports</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td data-label="Module"><code>bus.js</code></td>
+                                <td data-label="Job">
+                                    Reads the IPN bus strictly as a change signal —
+                                    <em>that</em> something changed, never
+                                    <em>what</em>; offers no way to read a peer's value
+                                    out of it.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>cancel.js</code></td>
+                                <td data-label="Job">
+                                    One cancellation token per enable: canceling it
+                                    aborts every request and settles every pending wait.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>collate.js</code></td>
+                                <td data-label="Job">
+                                    How names are ordered wherever QuickTS sorts them.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module">
+                                    <code>device-section.js</code>
+                                </td>
+                                <td data-label="Job">
+                                    The Devices submenu: ping a peer, copy its address
+                                    or DNS name, send it files.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>menu-items.js</code>,
+                                    <code>navigable-section.js</code>,
+                                    <code>ping.js</code>, <code>settings.js</code>,
+                                    <code>taildrop.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>errors.js</code></td>
+                                <td data-label="Job">
+                                    Why a request to tailscaled failed, as a
+                                    <code>REASON</code> value rather than a string.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module">
+                                    <code>exit-node-section.js</code>
+                                </td>
+                                <td data-label="Job">
+                                    The Exit node submenu: none, the daemon's
+                                    suggestion, the tailnet's own candidates, Mullvad's
+                                    grouped by country.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>menu-items.js</code>, <code>mullvad.js</code>,
+                                    <code>navigable-section.js</code>,
+                                    <code>settings.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>health.js</code></td>
+                                <td data-label="Job">
+                                    What the menu should say about the daemon's warnings
+                                    and its backend state.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>errors.js</code>, <code>state.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>inbox.js</code></td>
+                                <td data-label="Job">
+                                    Taildrop's receiving half: which waiting file names
+                                    are safe to use, and the candidate names a save
+                                    falls back to.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>io.js</code></td>
+                                <td data-label="Job">
+                                    The only module that touches Soup, Gio and the
+                                    portal; carries out a decision, never makes one.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>cancel.js</code>, <code>errors.js</code>,
+                                    <code>inbox.js</code>, <code>localapi.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>layout.js</code></td>
+                                <td data-label="Job">
+                                    How tall the menu is allowed to be.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>localapi.js</code></td>
+                                <td data-label="Job">
+                                    Every request QuickTS makes to tailscaled's
+                                    LocalAPI: the path, the body, what gets
+                                    percent-encoded.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>menu-items.js</code></td>
+                                <td data-label="Job">
+                                    Menu rows and small helpers every section of the
+                                    menu shares.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>errors.js</code>, <code>warnings.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>model.js</code></td>
+                                <td data-label="Job">
+                                    The store: everything QuickTS knows, and everything
+                                    it can be asked to do.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>bus.js</code>, <code>cancel.js</code>,
+                                    <code>errors.js</code>, <code>health.js</code>,
+                                    <code>inbox.js</code>, <code>localapi.js</code>,
+                                    <code>peers.js</code>, <code>ping.js</code>,
+                                    <code>reconnect.js</code>, <code>routes.js</code>,
+                                    <code>state.js</code>, <code>taildrop.js</code>,
+                                    <code>timing.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>mullvad.js</code></td>
+                                <td data-label="Job">
+                                    Grouping Mullvad's several thousand exit nodes by
+                                    country.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>collate.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module">
+                                    <code>navigable-section.js</code>
+                                </td>
+                                <td data-label="Job">
+                                    A submenu that swaps between a list and one entry's
+                                    detail.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>menu-items.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>panel.js</code></td>
+                                <td data-label="Job">
+                                    The actor tree: the tile, the keybinding, and the
+                                    menu sections it builds.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>device-section.js</code>,
+                                    <code>exit-node-section.js</code>,
+                                    <code>health.js</code>, <code>layout.js</code>,
+                                    <code>menu-items.js</code>, <code>routes.js</code>,
+                                    <code>settings.js</code>,
+                                    <code>taildrop-section.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>peers.js</code></td>
+                                <td data-label="Job">
+                                    The one shape a node has in QuickTS — the only file
+                                    that reads a raw peer field.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>collate.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>ping.js</code></td>
+                                <td data-label="Job">
+                                    Reading a disco ping result: the latency, and
+                                    whether it went direct or through a relay.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>reconnect.js</code></td>
+                                <td data-label="Job">
+                                    Keep a stream open for as long as the token is live.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>cancel.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>routes.js</code></td>
+                                <td data-label="Job">
+                                    Advertising routes: acting as an exit node and
+                                    offering subnets, as one preference.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>settings.js</code></td>
+                                <td data-label="Job">
+                                    The settings QuickTS has, named once: the gschema
+                                    keys and the label/detail text <code>prefs.js</code>
+                                    shows for each.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>shortcuts.js</code></td>
+                                <td data-label="Job">
+                                    The rules for capturing a keyboard accelerator.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>state.js</code></td>
+                                <td data-label="Job">
+                                    The whole of what QuickTS knows, as one immutable
+                                    snapshot.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>errors.js</code>, <code>peers.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module">
+                                    <code>taildrop-section.js</code>
+                                </td>
+                                <td data-label="Job">
+                                    Taildrop's two halves: the Send files submenu, and
+                                    received files waiting to be saved.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>inbox.js</code>, <code>menu-items.js</code>,
+                                    <code>taildrop.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>taildrop.js</code></td>
+                                <td data-label="Job">
+                                    Who can receive a file, and why the rest cannot.
+                                </td>
+                                <td data-label="Imports" class="muted">
+                                    <code>collate.js</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>timing.js</code></td>
+                                <td data-label="Job">
+                                    When to retry, and when to stop coalescing.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>warnings.js</code></td>
+                                <td data-label="Job">
+                                    Turning one of the daemon's health messages into
+                                    something the menu can show, pulling out a URL when
+                                    it carries one.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
                     <h3>The bus is a signal, not a source</h3>
                     <p>
                         The IPN bus says <em>that</em> something changed;
@@ -1532,7 +1821,7 @@
                             <strong>Signing out is deliberately absent.</strong> A login
                             unblocks the menu; a logout invalidates the node key and
                             needs another browser round trip to undo. That does not
-                            belong two clicks from the volume slider, and quick settings
+                            belong two clicks from the volume slider, and Quick Settings
                             has nowhere sensible to confirm it. Use
                             <code>tailscale logout</code>.
                         </p>
@@ -1627,11 +1916,11 @@
                     <p class="kicker">11</p>
                     <h2 id="releasing-title">Releasing</h2>
                     <p>
-                        Set the version in <code>metadata.json</code> and
-                        <code>package.json</code>, commit, tag and push. The release
-                        workflow checks the tag against both files before building, so
-                        it cannot publish a <code>v0.2.0</code> whose zip tells GNOME it
-                        is <code>0.1.0</code>.
+                        Set <code>version-name</code> in <code>metadata.json</code> and
+                        <code>version</code> in <code>package.json</code>, commit, then
+                        tag and push. The release workflow checks the tag against both
+                        files before building, so it cannot publish a tag whose version
+                        disagrees with either.
                     </p>
                     <div class="code night">
                         <header>
@@ -1642,8 +1931,8 @@
                         </header>
                         <pre
                             tabindex="0"
-                        ><span class="p">$ </span><span class="k">git</span> tag v0.2.0
-<span class="p">$ </span><span class="k">git</span> push origin v0.2.0</pre>
+                        ><span class="p">$ </span><span class="k">git</span> tag -a v0.1.1 -m 'release v0.1.1'
+<span class="p">$ </span><span class="k">git</span> push origin v0.1.1</pre>
                     </div>
                 </section>
 
@@ -1697,7 +1986,7 @@
             <nav aria-label="Footer">
                 <ul>
                     <li>
-                        <a href="https://ghost-assembly.github.io/">All projects</a>
+                        <a href="https://ghost-assembly.com/">All projects</a>
                     </li>
                     <li>
                         <a href="https://github.com/Ghost-Assembly/quickts">Source</a>

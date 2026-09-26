@@ -1,11 +1,12 @@
 # QuickTS
 
-Tailscale in the GNOME quick settings menu.
+Tailscale in Quick Settings: toggle the tailnet, pick an exit node, switch
+profiles, ping nodes and send or receive Taildrop files.
 
-Toggle the tailnet, pick an exit node, switch between profiles, copy a node's
-address and send a file over Taildrop, without leaving the panel.
+Copy a node's address or DNS name, and switch between accounts, all without
+leaving the panel.
 
-**[Documentation →](https://ghost-assembly.github.io/quickts/)** — architecture,
+**[Documentation →](https://ghost-assembly.com/quickts/)** — architecture,
 testing, packaging and releasing.
 
 ## Requires
@@ -38,14 +39,17 @@ just install
 just enable
 ```
 
-## Develop
+A newly installed extension is picked up when the Shell next starts; on
+Wayland, log out and back in.
+
+## Development
 
 ```bash
 just              # list every recipe
 just test         # unit suite
 just test-docs    # the docs site, in Chromium and Firefox
 just lint         # eslint, prettier, gschema, shellcheck
-just ci           # what CI runs: lint, tests, docs, security, build
+just ci           # what CI runs: lint, test, test-docs, security, build
 just test-live    # headless Shell, bundle and LocalAPI checks; needs a real
                   # gnome-shell and a running tailscaled (it may be stopped,
                   # but the daemon must answer)
@@ -58,13 +62,18 @@ deliberately free of branching: `modules/io.js` for the daemon, and
 `modules/panel.js` with the menu sections it builds (`exit-node-section.js`,
 `device-section.js`, `taildrop-section.js`, on top of `menu-items.js` and
 `navigable-section.js`) — see the
-[architecture notes](https://ghost-assembly.github.io/quickts/#architecture).
+[architecture notes](https://ghost-assembly.com/quickts/#architecture).
 
 ## Releasing
 
-Set the version in `metadata.json` (`version-name`) and `package.json`, commit,
-then tag and push. The release workflow refuses a tag that disagrees with
-either file.
+Set `version-name` in `metadata.json` and `version` in `package.json`,
+commit, then tag and push; the release workflow checks the tag against both
+files before building.
+
+```bash
+git tag -a v0.1.1 -m 'release v0.1.1'
+git push origin v0.1.1
+```
 
 ## License
 
