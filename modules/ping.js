@@ -30,6 +30,26 @@ export const ROUTE = Object.freeze({
 });
 
 /**
+ * Why a ping did not produce a usable latency, for a caller to translate.
+ *
+ * `error` on a failed result is still English, for a caller that cannot
+ * import gettext (this file) or that only logs it — but it is untranslated
+ * prose for NO_RESPONSE and NO_REPLY, the daemon's own text for a result this
+ * carries no issue for, and a REASON code for TRANSPORT (set by
+ * modules/model.js, not here). A caller showing the result to a person needs
+ * to know which of those `error` is, and this is how.
+ */
+export const PING_ISSUE = Object.freeze({
+    /** The request reached tailscaled itself; `error` is a REASON. Set only
+     * by modules/model.js's ping(), never returned from here. */
+    TRANSPORT: 'transport',
+    /** Nothing that looks like a ping response came back at all. */
+    NO_RESPONSE: 'no-response',
+    /** A response came back with no latency: it timed out. */
+    NO_REPLY: 'no-reply',
+});
+
+/**
  * Interpret a /localapi/v0/ping response.
  *
  * The daemon reports a failed ping as a 200 with `Err` set rather than as an
@@ -37,19 +57,22 @@ export const ROUTE = Object.freeze({
  * succeed.
  *
  * @param {object} response Parsed ping response.
- * @returns {{ok: boolean, error: string, latencyMs: number, route: string, relay: string}} What happened.
+ * @returns {{ok: boolean, error: string, issue: string, latencyMs: number, route: string, relay: string}}
+ *   What happened. `issue` is one of {@link PING_ISSUE}, or '' for a success
+ *   or for a failure the daemon itself worded (`error` is its own text then).
  */
 export function describePing(response) {
     const nothing = {
         ok: false,
         error: '',
+        issue: '',
         latencyMs: 0,
         route: ROUTE.UNKNOWN,
         relay: '',
     };
 
     if (response === null || typeof response !== 'object')
-        return { ...nothing, error: 'No response' };
+        return { ...nothing, error: 'No response', issue: PING_ISSUE.NO_RESPONSE };
 
     const error = String(response.Err ?? '').trim();
     if (error !== '') return { ...nothing, error };
@@ -59,7 +82,7 @@ export function describePing(response) {
     // A reply with no latency is not a reply. The daemon returns this shape
     // when the ping timed out without an explicit error.
     if (!Number.isFinite(seconds) || seconds <= 0)
-        return { ...nothing, error: 'No reply' };
+        return { ...nothing, error: 'No reply', issue: PING_ISSUE.NO_REPLY };
 
     const relay = String(response.DERPRegionCode ?? '').trim();
     const endpoint = String(response.Endpoint ?? '').trim();
@@ -67,6 +90,7 @@ export function describePing(response) {
     return {
         ok: true,
         error: '',
+        issue: '',
         latencyMs: roundLatency(seconds * 1000),
         route: routeOf(endpoint, relay),
         relay,

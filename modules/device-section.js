@@ -6,10 +6,16 @@
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import { ROUTE } from './ping.js';
+import { PING_ISSUE, ROUTE } from './ping.js';
 import { KEYS } from './settings.js';
 import { canReceive } from './taildrop.js';
-import { ActionMenuItem, addDisabledRow, addRow, copyText } from './menu-items.js';
+import {
+    ActionMenuItem,
+    addDisabledRow,
+    addRow,
+    copyText,
+    problemMessage,
+} from './menu-items.js';
 import { NavigableSection } from './navigable-section.js';
 
 /** The device submenu. */
@@ -189,9 +195,18 @@ export class DeviceSection {
 
         row.setSensitive(true);
         // Never _(''): gettext answers the empty string with the
-        // catalog's header.
+        // catalog's header. Keyed off `issue`, from modules/ping.js, rather
+        // than passing `error` itself to _(): only PING_ISSUE.TRANSPORT's and
+        // PING_ISSUE.NO_REPLY's/NO_RESPONSE's are ever a literal in the
+        // source — the daemon's own text (issue === '' while !ok) is data,
+        // and must never reach gettext at all.
         if (result.ok) row.label.text = formatPing(result, this._i18n);
-        else if (result.error) row.label.text = _(result.error);
+        else if (result.issue === PING_ISSUE.TRANSPORT)
+            row.label.text = problemMessage(result.error, _);
+        else if (result.issue === PING_ISSUE.NO_RESPONSE)
+            row.label.text = _('No response');
+        else if (result.issue === PING_ISSUE.NO_REPLY) row.label.text = _('No reply');
+        else if (result.error) row.label.text = result.error;
         else row.label.text = _('No reply');
     }
 }
