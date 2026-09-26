@@ -1,14 +1,14 @@
 // A recording stand-in for a Clutter actor.
 //
 // The stubs under tests/stubs/ are built on this. It exists so that
-// tests/panel.test.js can assert QuickTS's own bookkeeping — how many handlers
+// the unit suite can assert the extension's own bookkeeping — how many handlers
 // are connected, how many are left after destroy, what style was applied, which
 // children were added — rather than asserting that a stub behaves like a stub.
 //
 // GObject subclasses in gnome-shell are constructed through _init rather than a
 // constructor, so the base here calls _init from its constructor and
-// registerClass is the identity. That is why nothing in modules/panel.js may
-// use class fields: they initialize after super() returns, which is after
+// registerClass is the identity. That is why no GObject subclass in modules/
+// may use class fields: they initialize after super() returns, which is after
 // _init has already run — exactly as in real GJS.
 
 /** Handlers connected anywhere, so a test can prove they were all released. */
@@ -33,6 +33,8 @@ export class FakeActor {
         this.actions = [];
         this.style = null;
         this.visible = true;
+        this.opacity = 255;
+        this.pseudoClasses = new Set();
         this.reactive = true;
         this.styleClasses = new Set();
         this._parentActor = null;
@@ -70,7 +72,7 @@ export class FakeActor {
         liveHandlers.delete(id);
     }
 
-    /** gnome-shell's owner-scoped connect, which modules/panel.js uses throughout. */
+    /** gnome-shell's owner-scoped connect, from its signalTracker.js. */
     connectObject(...args) {
         const owner = args.pop();
         while (args.length >= 2) {
@@ -94,6 +96,11 @@ export class FakeActor {
 
     add_child(child) {
         this.children.push(child);
+        child._parentActor = this;
+    }
+
+    insert_child_at_index(child, index) {
+        this.children.splice(index, 0, child);
         child._parentActor = this;
     }
 
@@ -128,16 +135,21 @@ export class FakeActor {
         this.styleClasses.delete(name);
     }
 
-    add_style_pseudo_class() {}
-    remove_style_pseudo_class() {}
+    add_style_pseudo_class(name) {
+        this.pseudoClasses.add(name);
+    }
+
+    remove_style_pseudo_class(name) {
+        this.pseudoClasses.delete(name);
+    }
 
     set_style(style) {
         this.style = style;
     }
 
     get_theme_node() {
-        // Enough of a theme node for modules/layout.js's output to be read
-        // back the way St would read it.
+        // Enough of a theme node for a max-height set through set_style() to
+        // be read back the way St would read it.
         const match = /max-height:\s*(\d+)px/.exec(this.style ?? '');
         return { get_max_height: () => (match ? Number(match[1]) : -1) };
     }
@@ -164,6 +176,10 @@ export class FakeActor {
     }
 
     destroy() {
+        if (this._wasDestroyed) return;
+        // As Clutter: 'destroy' is emitted first, while handlers are still
+        // connected, which is what lets a subclass clean up from the signal.
+        this.emit('destroy');
         this._wasDestroyed = true;
         this._parentActor = null;
         for (const id of [...this.handlers.keys()]) this.disconnect(id);

@@ -14,8 +14,7 @@ import security from 'eslint-plugin-security';
 // Every name below was checked against the running interpreter with
 // `gjs -c 'print(typeof globalThis.<name>)'` on gjs 1.88.1. Four names that a
 // browser would provide are absent and must stay absent from this list:
-// `fetch`, `structuredClone`, `queueMicrotask` and `AbortController`. The last
-// is why modules/cancel.js exists.
+// `fetch`, `structuredClone`, `queueMicrotask` and `AbortController`.
 const gjsGlobals = {
     ARGV: 'readonly',
     imports: 'readonly',
@@ -56,8 +55,8 @@ export default [
         },
     },
     {
-        // scripts/localapi-check.sh runs this one under plain gjs, outside
-        // gnome-shell, so it gets the GJS globals but not `global`.
+        // scripts/*.js run under plain gjs, outside gnome-shell, so they get
+        // the GJS globals but not `global`.
         files: ['scripts/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
@@ -72,6 +71,12 @@ export default [
             ecmaVersion: 2022,
             sourceType: 'module',
             globals: globals.node,
+        },
+        rules: {
+            // The stubs mirror real GObject signatures, so they carry
+            // parameters they have no use for. Same convention as the
+            // extension code above.
+            'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
         },
     },
     {

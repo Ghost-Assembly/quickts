@@ -1,16 +1,23 @@
-// resource:///org/gnome/shell/ui/popupMenu.js, as far as modules/panel.js uses it.
+// resource:///org/gnome/shell/ui/popupMenu.js, as far as the extension uses it.
 //
-// The menu classes keep real child bookkeeping, so tests/panel.test.js can
-// count the rows QuickTS built and fire the ones it cares about, rather than
+// The menu classes keep real child bookkeeping, so the unit suite can count the
+// rows the extension built and fire the ones it cares about, rather than
 // asserting against a mock's call log.
 
 import { FakeActor } from '../support/actors.js';
+
+const Ornament = Object.freeze({ NONE: 0, DOT: 1, CHECK: 2, HIDDEN: 3, NO_DOT: 4 });
 
 class PopupBaseMenuItem extends FakeActor {
     _init(props = {}) {
         super._init(props);
         this.sensitive = props.reactive !== false;
         this.label_actor = null;
+        this.ornament = Ornament.NONE;
+    }
+
+    setOrnament(ornament) {
+        this.ornament = ornament;
     }
 
     setSensitive(sensitive) {
@@ -30,13 +37,25 @@ function makeLabel(text) {
         line_wrap: false,
         line_wrap_mode: null,
         ellipsize: null,
+        use_markup: false,
     };
     return label;
 }
 
-class PopupMenuItem extends PopupBaseMenuItem {
-    _init(text, props = {}) {
-        super._init(props);
+/**
+ * An item with the St.Label the real classes expose as `this.label` and set
+ * label_actor to.
+ *
+ * Shared rather than repeated per subclass: the real popupMenu.js gives every
+ * labeled item the same handle, and a stub that built one of them differently —
+ * a submenu label with no clutter_text, say — is a difference between rows
+ * that exists only in the test suite.
+ */
+class LabeledMenuItem extends PopupBaseMenuItem {
+    /**
+     * @param {string} text Initial label text.
+     */
+    _initLabel(text) {
         this.label = makeLabel(text);
         this.label_actor = this.label;
         this.add_child(this.label);
@@ -51,21 +70,18 @@ class PopupMenuItem extends PopupBaseMenuItem {
     }
 }
 
-class PopupImageMenuItem extends PopupBaseMenuItem {
+class PopupMenuItem extends LabeledMenuItem {
+    _init(text, props = {}) {
+        super._init(props);
+        this._initLabel(text);
+    }
+}
+
+class PopupImageMenuItem extends LabeledMenuItem {
     _init(text, icon, props = {}) {
         super._init(props);
-        this.label = makeLabel(text);
-        this.label_actor = this.label;
-        this.add_child(this.label);
+        this._initLabel(text);
         this.icon = icon;
-    }
-
-    get text() {
-        return this.label.text;
-    }
-
-    set text(value) {
-        this.label.text = value;
     }
 
     setIcon(icon) {
@@ -73,21 +89,11 @@ class PopupImageMenuItem extends PopupBaseMenuItem {
     }
 }
 
-class PopupSwitchMenuItem extends PopupBaseMenuItem {
+class PopupSwitchMenuItem extends LabeledMenuItem {
     _init(text, active, props = {}) {
         super._init(props);
-        this.label = makeLabel(text);
-        this.label_actor = this.label;
-        this.add_child(this.label);
+        this._initLabel(text);
         this.state = Boolean(active);
-    }
-
-    get text() {
-        return this.label.text;
-    }
-
-    set text(value) {
-        this.label.text = value;
     }
 
     setToggleState(state) {
@@ -101,7 +107,13 @@ class PopupSwitchMenuItem extends PopupBaseMenuItem {
     }
 }
 
-class PopupSeparatorMenuItem extends PopupBaseMenuItem {}
+/** As the real one: an optional label, shown as a section heading. */
+class PopupSeparatorMenuItem extends PopupBaseMenuItem {
+    _init(text = '') {
+        super._init();
+        this.text = text;
+    }
+}
 
 /** The shared behavior of anything that holds menu items. */
 class MenuBase extends FakeActor {
@@ -162,17 +174,15 @@ class MenuBase extends FakeActor {
 
 class PopupMenuSection extends MenuBase {}
 
-class PopupSubMenuMenuItem extends PopupBaseMenuItem {
+class PopupSubMenuMenuItem extends LabeledMenuItem {
     _init(text, wantIcon = false, props = {}) {
         super._init(props);
 
         // The real class exposes the St.Label as `this.label` and sets
-        // label_actor to it (js/ui/popupMenu.js:1320). modules/panel.js
-        // relabels the exit node submenu through it, so the stub has to offer
-        // the same handle rather than a plain string.
-        this.label = new FakeActor({ text });
-        this.label_actor = this.label;
-        this.add_child(this.label);
+        // label_actor to it (js/ui/popupMenu.js:1320). Extensions relabel a
+        // submenu through it, so the stub offers the same handle rather than a
+        // plain string.
+        this._initLabel(text);
 
         if (wantIcon) {
             this.icon = new FakeActor();
@@ -183,17 +193,21 @@ class PopupSubMenuMenuItem extends PopupBaseMenuItem {
         this.menu._ownerItem = this;
         this.add_child(this.menu);
     }
+}
 
-    get text() {
-        return this.label.text;
-    }
-
-    set text(value) {
-        this.label.text = value;
+/** A top-level menu, as a PanelMenu.Button or an extension builds one. */
+class PopupMenu extends MenuBase {
+    _init(sourceActor, arrowAlignment, arrowSide) {
+        super._init();
+        this.sourceActor = sourceActor;
+        this.arrowAlignment = arrowAlignment;
+        this.arrowSide = arrowSide;
     }
 }
 
 export {
+    Ornament,
+    PopupMenu,
     MenuBase,
     PopupBaseMenuItem,
     PopupImageMenuItem,

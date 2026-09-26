@@ -1,10 +1,9 @@
-// GLib, as far as modules/panel.js uses it.
+// GLib, as far as the extension uses it.
 //
 // The timeout functions record live source ids so a test can assert that none
-// outlived a disable, which is the leak the extension QuickTS replaces has.
-// Callbacks are never invoked on their own: a test fires one through
-// runSource(), so when a timer goes off is a decision the test makes rather
-// than a race it has to win.
+// outlived a disable. Callbacks are never invoked on their own: a test fires
+// one through runSource(), so when a timer goes off is a decision the test
+// makes rather than a race it has to win.
 
 /** Source ids currently live. */
 export const liveSources = new Set();
@@ -65,5 +64,8 @@ export default {
         },
     },
 
-    get_monotonic_time: () => 0,
+    // A fixed, non-zero clock: code that subtracts two readings sees no time
+    // pass unless the test injects its own clock.
+    get_monotonic_time: () => 42_000_000,
+    uuid_string_random: () => '00000000-0000-4000-8000-000000000000',
 };
