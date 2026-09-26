@@ -971,7 +971,11 @@ describe('waiting files', () => {
 
             const result = await model.saveFile(name);
 
-            expect(result.error).toMatch(/\S/);
+            // A REASON code, not composed English: modules/taildrop-section.js
+            // translates this itself, through modules/menu-items.js's
+            // problemMessage, rather than being handed a sentence gettext can
+            // never see as a literal.
+            expect(result.error).toBe(REASON.PROTOCOL);
             expect(daemon.saved).toEqual([]);
             expect(daemon.deleted).toEqual([]);
             expect(daemon.paths).toEqual([]);
@@ -988,7 +992,9 @@ describe('waiting files', () => {
 
         const result = await model.saveFile('a.txt');
 
-        expect(result.error).toMatch(/\S/);
+        // Same: the REASON the daemon failure carried, not messageFor's
+        // composed English.
+        expect(result.error).toBe(REASON.HTTP);
         expect(daemon.deleted).toEqual([]);
     });
 
