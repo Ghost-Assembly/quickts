@@ -127,6 +127,12 @@ describe('received files', () => {
     // already-composed English (messageFor), and _(error) then asked gettext
     // to translate a sentence it can never see when the .pot file is built —
     // only a literal string reaches xgettext.
+    // REASON.PERMISSION_DENIED, not REASON.HTTP: its composed message
+    // embeds the fix-it command and so is the one reason whose text differs
+    // from its own literal — every other REASON's composed English happens
+    // to read exactly like the literal problemMessage returns for it, so a
+    // regression back to `_(error)` would still pass this test under any of
+    // them.
     it('words a failed save only in a string a translator is given', async () => {
         const asked = [];
         const gettext = message => (asked.push(message), message);
@@ -140,16 +146,18 @@ describe('received files', () => {
 
         daemon.failures.set('/localapi/v0/files/report.pdf', {
             name: 'TransportError',
-            reason: REASON.HTTP,
+            reason: REASON.PERMISSION_DENIED,
         });
 
         asked.length = 0;
-        toggleOf()._inbox.menu.items.at(0).activate();
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
         await settle();
 
         expect(asked.length).toBeGreaterThan(0);
         const known = extractableMsgids();
         for (const message of asked) expect(known, message).toContain(message);
+        expect(row.text).toContain('tailscale set --operator=');
     });
 });
 
