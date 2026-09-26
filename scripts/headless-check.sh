@@ -8,10 +8,12 @@
 # the Shell warns.
 #
 # QuickTS's own assertions (the per-repo block below): whether tailscaled is
-# reachable at all. This script must pass either way — a developer with no
-# Tailscale installed still has to be able to run `just test-live` — so it
-# only notes which mode it ran in; scripts/localapi-check.sh is what actually
-# probes modules/io.js against a live daemon, run separately by `live-extra`.
+# reachable at all. This script passes either way — enabling and disabling
+# cleanly has nothing to do with the daemon — so it only notes which mode it
+# ran in, rather than asserting on it. `just test-live` as a whole still needs
+# a reachable daemon regardless: it also runs scripts/localapi-check.sh, via
+# `live-extra` in project.just, which is what actually probes modules/io.js
+# against it and fails outright — not gracefully — without one.
 #
 # This needs a real gnome-shell and so runs locally only; GitHub's runners have
 # no GNOME 50.
@@ -91,11 +93,12 @@ ALLOWED_WARNINGS=''
 TAILSCALED_REACHABLE=0
 
 before_shell() {
-    # Best-effort and non-fatal: this check has to pass whether or not
-    # Tailscale is installed, since a developer without it still needs to be
-    # able to run `just test-live`. scripts/localapi-check.sh is what actually
-    # asserts something about the daemon's answers, and it skips itself with a
-    # clear FAIL when tailscaled is not reachable.
+    # Best-effort and non-fatal: this check passes whether or not Tailscale is
+    # installed — enabling and disabling the Shell extension does not depend
+    # on the daemon. scripts/localapi-check.sh is what actually asserts
+    # something about the daemon's answers, and it exits 1 with a clear FAIL,
+    # not a skip, when tailscaled is not reachable — so `just test-live` as a
+    # whole still fails without one.
     if command -v tailscale >/dev/null && tailscale status --json >/dev/null 2>&1; then
         TAILSCALED_REACHABLE=1
     fi
