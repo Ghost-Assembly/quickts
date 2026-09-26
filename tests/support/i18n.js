@@ -50,31 +50,70 @@ export function extractableMsgids() {
     return ids;
 }
 
+// A literal argument: a single- or double-quoted string. xgettext's own
+// extractor (and extractableMsgids above) only ever sees these two shapes;
+// prettier keeps this codebase to single quotes, but a checker that rejected
+// a double-quoted literal as if it were a variable would be checking its own
+// house style, not extractability.
+const LITERAL_ARG = /^(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/;
+
 /**
- * Every _()/_n() call under modules/ whose first argument is not a string
- * literal, as far as a regex can tell — the same authority extractableMsgids
- * already relies on. `_(variable)`, `_(a.b)` and `` _(`template`) `` are all
- * invisible to xgettext exactly the same way, and this is how a test catches
- * one before it ships rather than after a translator asks where a string's
- * msgid went.
+ * Every _()/_n() call under modules/ whose first argument — or, for _n(),
+ * whose second (plural) argument — is not a string literal, as far as a
+ * regex can tell — the same authority extractableMsgids already relies on.
+ * `_(variable)`, `_(a.b)` and `` _(`template`) `` are all invisible to
+ * xgettext exactly the same way, and so is `_n('one', pluralVar, n)`: the
+ * PLURAL regex above pulls its msgid_plural from the same position, and a
+ * variable there is just as silently dropped. This is how a test catches one
+ * before it ships rather than after a translator asks where a string's msgid
+ * went.
  *
+ * @param {{name: string, source: string}[]} [files] Files to check; defaults
+ *   to every module file, and is otherwise only ever overridden by a test.
  * @returns {string[]} One line per offending call: "file:line: what follows".
  */
-export function nonLiteralGettextCalls() {
+export function nonLiteralGettextCalls(files = moduleFiles()) {
     const violations = [];
-    for (const { name, source } of moduleFiles()) {
+    for (const { name, source } of files) {
         for (const match of source.matchAll(CALL_START)) {
             const after = source.slice(match.index + match[0].length);
             const leadingSpace = after.match(/^\s*/)[0];
-            const next = after[leadingSpace.length];
-            // A literal argument, or a bare _() with none at all — the latter
-            // is never real code (nothing calls gettext with no message) and
-            // is how this file's own comments can still say "_()".
-            if (next === "'" || next === ')') continue;
+            const rest = after.slice(leadingSpace.length);
 
-            const line = source.slice(0, match.index).split('\n').length;
-            const snippet = after.slice(0, 40).replace(/\s+/g, ' ').trim();
-            violations.push(`${name}:${line}: ${match[0]}${snippet}`);
+            // A bare _()/_n() with no argument at all is never real code —
+            // nothing calls gettext with no message — and is how this file's
+            // own comments can still say "_()".
+            if (rest[0] === ')') continue;
+
+            const first = rest.match(LITERAL_ARG);
+            if (!first) {
+                const line = source.slice(0, match.index).split('\n').length;
+                const snippet = after.slice(0, 40).replace(/\s+/g, ' ').trim();
+                violations.push(`${name}:${line}: ${match[0]}${snippet}`);
+                continue;
+            }
+
+            // Only _n() takes a second, plural argument — and only once the
+            // first was itself a literal; a non-literal first argument was
+            // already flagged above.
+            if (match[0] !== '_n(') continue;
+
+            const afterFirst = rest.slice(first[0].length);
+            const comma = afterFirst.match(/^\s*,\s*/);
+            if (!comma) continue; // not a well-formed call; not this check's job
+
+            const second = afterFirst.slice(comma[0].length);
+            if (!LITERAL_ARG.test(second)) {
+                const offset =
+                    match.index +
+                    match[0].length +
+                    leadingSpace.length +
+                    first[0].length +
+                    comma[0].length;
+                const line = source.slice(0, offset).split('\n').length;
+                const snippet = second.slice(0, 40).replace(/\s+/g, ' ').trim();
+                violations.push(`${name}:${line}: ${snippet}`);
+            }
         }
     }
     return violations;
