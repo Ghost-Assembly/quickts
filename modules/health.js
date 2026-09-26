@@ -158,8 +158,11 @@ export function summaryOf(state) {
  * a command nobody would otherwise discover from an empty menu.
  *
  * @param {object} state A snapshot.
- * @returns {{message: string, command: string, actionable: boolean}|null} What
- *   to say, the command that fixes it if there is one, or null if fine.
+ * @returns {{reason: string, message: string, command: string, actionable: boolean}|null}
+ *   `reason` is untranslated, a REASON from modules/errors.js — the key
+ *   modules/menu-items.js's problemMessage switches on to translate it.
+ *   `message` is messageFor(reason)'s own composed English. The command that
+ *   fixes it if there is one, or null if the daemon is reachable.
  */
 export function problemOf(state) {
     if (state.reachable) return null;
@@ -167,6 +170,7 @@ export function problemOf(state) {
     const reason = state.errorReason || REASON.UNKNOWN;
 
     return {
+        reason,
         message: messageFor(reason),
         command: commandFor(reason),
         actionable: isActionable(reason),

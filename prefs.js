@@ -56,6 +56,31 @@ const GTK_BINDING = {
     acceleratorValid: (keyval, mask) => Gtk.accelerator_valid(keyval, mask),
 };
 
+/**
+ * Stop GNOME acting on its own shortcuts while one is being captured, so a
+ * combination like Super or Print SysRq reaches the capture dialog and can be
+ * refused there, instead of opening the overview or taking a screenshot out
+ * from under it. gnome-control-center does the same; the Shell may ask the
+ * user first the first time an extension asks for this.
+ *
+ * Same approach as quickclip's prefs.js.
+ *
+ * @param {Gtk.Widget} widget Any widget belonging to the surface to inhibit —
+ *   the capture dialog itself, once presented.
+ * @returns {Function} Call once, on every way out, to give the shortcuts back.
+ */
+function inhibitSystemShortcuts(widget) {
+    const surface = widget.get_native()?.get_surface();
+    // Only a Gdk.Toplevel surface has these; never let prefs throw without.
+    if (
+        typeof surface?.inhibit_system_shortcuts !== 'function' ||
+        typeof surface.restore_system_shortcuts !== 'function'
+    )
+        return () => {};
+    surface.inhibit_system_shortcuts(null);
+    return () => surface.restore_system_shortcuts();
+}
+
 const ShortcutRow = GObject.registerClass(
     class QuickTSShortcutRow extends Adw.ActionRow {
         /**
@@ -139,6 +164,12 @@ const ShortcutRow = GObject.registerClass(
             dialog.add_controller(controller);
 
             dialog.present();
+
+            // 'close-request' fires on every way out: Escape, Backspace and
+            // an assigned key all call dialog.close() above, and so does the
+            // window's own close button.
+            const restore = inhibitSystemShortcuts(dialog);
+            dialog.connect('close-request', () => restore());
         }
     },
 );
@@ -233,7 +264,7 @@ export default class QuickTSPreferences extends ExtensionPreferences {
 
         const menu = new Adw.PreferencesGroup({
             title: _('Menu'),
-            description: _('What the quick settings menu lists.'),
+            description: _('What the Quick Settings menu lists.'),
         });
 
         // Titled from modules/settings.js, which is where a key is described,

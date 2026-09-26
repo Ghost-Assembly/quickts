@@ -9,8 +9,50 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { formatSize } from './inbox.js';
-import { hasEligibleTarget, isListedTarget, sendTargets } from './taildrop.js';
-import { ActionMenuItem, showOsd } from './menu-items.js';
+import {
+    TAILDROP,
+    hasEligibleTarget,
+    isListedTarget,
+    sendTargets,
+    unlistedReason,
+} from './taildrop.js';
+import { ActionMenuItem, problemMessage, showOsd } from './menu-items.js';
+
+/**
+ * Why a node cannot receive a file, translated.
+ *
+ * modules/taildrop.js's reasonFor composes the same wording untranslated, for
+ * a caller that cannot import gettext; this switches on the status itself so
+ * a literal string reaches xgettext, rather than handing gettext the English
+ * reasonFor already built.
+ *
+ * Exported for a direct test over every status, the same way
+ * modules/taildrop.js's own reasonFor is tested.
+ *
+ * @param {number} status A TaildropTargetStatus.
+ * @param {Function} _ gettext.
+ * @returns {string} A reason.
+ */
+export function taildropReason(status, _) {
+    switch (status) {
+        case TAILDROP.OFFLINE:
+            return _('Offline');
+        case TAILDROP.NOT_RUNNING:
+            return _('Tailscale is not running there');
+        case TAILDROP.MISSING_CAP:
+            return _('Taildrop is not enabled for this tailnet');
+        case TAILDROP.UNSUPPORTED_OS:
+            return _('Not supported on that system');
+        case TAILDROP.OWNED_BY_OTHER_USER:
+            return _('Owned by another user');
+        case TAILDROP.NO_PEER_API:
+        case TAILDROP.NO_PEER_INFO:
+        case TAILDROP.NO_NETMAP:
+            return _('Cannot be reached right now');
+        default:
+            return _('Cannot receive files');
+    }
+}
 
 /** The "Send files" submenu, and every send, whichever row started it. */
 export class SendSection {
@@ -74,9 +116,11 @@ export class SendSection {
         this.item.visible = hasEligibleTarget(targets);
         if (!this.item.visible) return;
 
-        for (const { node, eligible, reason } of targets) {
+        for (const { node, eligible } of targets) {
             const item = new PopupMenu.PopupImageMenuItem(
-                eligible ? node.name : `${node.name} — ${_(reason)}`,
+                eligible
+                    ? node.name
+                    : `${node.name} — ${taildropReason(unlistedReason(node), _)}`,
                 node.icon,
             );
 
@@ -245,7 +289,7 @@ export class InboxSection {
 
         if (error) {
             row.setSensitive(true);
-            row.label.text = _(error);
+            row.label.text = problemMessage(error, _);
             return;
         }
 

@@ -10,6 +10,7 @@ import { launchContexts, launchFailure, launchedUris } from './stubs/gi-gio.js';
 import { clipboard, themeContext } from './stubs/gi-st.js';
 import * as Main from './stubs/shell-main.js';
 import { descendants, liveHandlers } from './support/actors.js';
+import { extractableMsgids } from './support/i18n.js';
 import { createSettings } from './support/world.js';
 import {
     deviceActionRows,
@@ -332,6 +333,37 @@ describe('problems and warnings', () => {
         expect(toggleOf()._problems.items.map(item => item.text)).toContain('Log in…');
     });
 
+    // The problem row and the subtitle both word an unreachable daemon from
+    // modules/errors.js's already-composed English (messageFor), and passing
+    // that straight to _() asks gettext to translate a sentence it can never
+    // see when the .pot file is built — only a literal string reaches
+    // xgettext. Every message this scenario hands to gettext must be one.
+    it('words the problem row and subtitle only in strings a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        daemon.failures.set('/localapi/v0/', {
+            name: 'TransportError',
+            reason: REASON.PERMISSION_DENIED,
+        });
+
+        asked.length = 0;
+        panel.enable();
+        await model.start();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
+
+        expect(
+            toggleOf()._problems.items.some(item =>
+                item.text?.includes('tailscale set --operator='),
+            ),
+        ).toBe(true);
+        expect(toggleOf().subtitle).toContain('tailscale set --operator=');
+    });
+
     it('offers a login row when the backend needs one', async () => {
         const { panel, model, daemon } = setup();
         daemon.responses.status.BackendState = BACKEND.NEEDS_LOGIN;
@@ -571,6 +603,56 @@ describe('menu height', () => {
         expect(setMenuOpen).toHaveBeenCalledWith(true);
         expect(setMenuOpen).toHaveBeenCalledWith(false);
     });
+
+    // _onOpenStateChanged always cancels a pending remeasure before starting
+    // another, so this can only happen if _remeasureOnceLaidOut is ever asked
+    // for twice without that — the next call site to forget it, or two opens
+    // racing each other before _cancelRemeasure runs between them.
+    //
+    // Two bugs, both from the same root cause: the allocation handler read
+    // `this._allocationId` and `this._laterId` at fire time rather than the
+    // ids the request that scheduled them was actually given.
+    //
+    //   - The handler: a second request overwrote `this._allocationId`
+    //     before the first fired, so the first handler's own disconnect call
+    //     disconnected the SECOND handler instead of itself, leaking the
+    //     first's connection to 'notify::allocation' forever.
+    //   - The later: with the handler leak fixed by capturing each request's
+    //     own allocation id, BOTH handlers now fire and each schedules its
+    //     own later — but both still wrote through the shared
+    //     `this._laterId`, so the second overwrote the first's id there too.
+    //     A _cancelRemeasure() landing between the fire and the next redraw
+    //     (the menu closing again before BEFORE_REDRAW runs) would then
+    //     remove only the later `this._laterId` still named, leaving the
+    //     first scheduled forever.
+    //
+    // _remeasureOnceLaidOut starting with _cancelRemeasure() closes both at
+    // once: a second request now disconnects and unschedules the first
+    // before it ever gets the chance to fire, so at most one of each is ever
+    // outstanding.
+    it('does not leak a handler or a scheduled later when a remeasure is requested twice before it fires', async () => {
+        const { panel, model } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+
+        const before = liveHandlers.size;
+
+        toggleOf()._remeasureOnceLaidOut();
+        toggleOf()._remeasureOnceLaidOut();
+        toggleOf().menu.actor.emit('notify::allocation');
+
+        expect(liveHandlers.size).toBe(before);
+        expect(toggleOf()._allocationId).toBe(0);
+        // Not two: a second later scheduled under the twin bug survives here,
+        // before runLaters drains whatever is left in the map regardless of
+        // which one the field still names.
+        expect(laters.size).toBe(1);
+
+        runLaters();
+
+        expect(laters.size).toBe(0);
+    });
 });
 
 describe('the keybinding', () => {
@@ -593,7 +675,7 @@ describe('the keybinding', () => {
         expect(toggleOf().menu.isOpen).toBe(true);
     });
 
-    // Opening quick settings and reading where the tile's menu sits in the
+    // Opening Quick Settings and reading where the tile's menu sits in the
     // same breath reads a position the Shell has not laid out yet. The height
     // is measured again once the menu has been allocated.
     it('measures the height again once the menu has been laid out', async () => {
@@ -1130,7 +1212,7 @@ describe('teardown', () => {
         expect(indicator._wasDestroyed).toBe(true);
     });
 
-    // The Shell parents the toggle's menu into the quick settings overlay and
+    // The Shell parents the toggle's menu into the Quick Settings overlay and
     // never destroys it, so the extension must, or every lock leaks one —
     // along with the toggle, model and transport its handlers still reach.
     it('destroys the tile menu the Shell leaves behind', () => {

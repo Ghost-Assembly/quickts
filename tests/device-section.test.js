@@ -5,6 +5,7 @@ import { KEYS } from '../modules/settings.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import { clipboard } from './stubs/gi-st.js';
 import * as Main from './stubs/shell-main.js';
+import { extractableMsgids } from './support/i18n.js';
 import { createSettings } from './support/world.js';
 import {
     deviceActionRows,
@@ -231,6 +232,23 @@ describe('devices', () => {
             expect(row.text).toBe('No reply');
         });
 
+        // A response that is not usable as one at all — modules/ping.js's
+        // PING_ISSUE.NO_RESPONSE, distinct from NO_REPLY's "answered but
+        // named no latency".
+        it('says so when the daemon sends back nothing usable', async () => {
+            const { panel, model, daemon } = setup();
+            panel.enable();
+            await model.start();
+            await settle();
+            daemon.responses.ping = null;
+
+            const row = deviceActions().find(item => item.text === 'Ping');
+            row.activate();
+            await settle();
+
+            expect(row.text).toBe('No response');
+        });
+
         // A netmap update while a result is on screen used to rebuild the
         // section and take the result with it, along with the open submenu.
         it('survives an unrelated state change', async () => {
@@ -267,6 +285,37 @@ describe('devices', () => {
             await settle();
 
             expect(model.state.reachable).toBe(true);
+        });
+
+        // modules/model.js's ping() used to hand this row modules/errors.js's
+        // already-composed English (messageFor(reasonOf(error))), and
+        // _(result.error) then asked gettext to translate a sentence it can
+        // never see when the .pot file is built — only a literal string
+        // reaches xgettext. REASON.PERMISSION_DENIED is the one reason whose
+        // composed message differs from its literal (it embeds the fix-it
+        // command), so it is the one a regression back to that shape would
+        // not hide behind a literal that happens to read the same either way.
+        it('words a transport failure only in a string a translator is given', async () => {
+            const asked = [];
+            const gettext = message => (asked.push(message), message);
+            const { panel, model, daemon } = setup({ gettext });
+            panel.enable();
+            await model.start();
+            await settle();
+            daemon.failures.set('/localapi/v0/ping', {
+                name: 'TransportError',
+                reason: REASON.PERMISSION_DENIED,
+            });
+
+            asked.length = 0;
+            const row = deviceActions().find(item => item.text === 'Ping');
+            row.activate();
+            await settle();
+
+            expect(asked.length).toBeGreaterThan(0);
+            const known = extractableMsgids();
+            for (const message of asked) expect(known, message).toContain(message);
+            expect(row.text).toContain('tailscale set --operator=');
         });
     });
 

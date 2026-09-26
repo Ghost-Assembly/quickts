@@ -13,7 +13,12 @@ import { createClock, createDaemon, createScheduler } from './daemon.js';
 import { createSettings } from './world.js';
 
 /** Build a panel over a fake daemon, ready to enable. */
-export function setup({ seed, settings = createSettings(), chooseFiles } = {}) {
+export function setup({
+    seed,
+    settings = createSettings(),
+    chooseFiles,
+    gettext = message => message,
+} = {}) {
     const daemon = createDaemon(seed);
     const clock = createClock();
     const { scheduler } = createScheduler(daemon.token, clock);
@@ -28,7 +33,7 @@ export function setup({ seed, settings = createSettings(), chooseFiles } = {}) {
         model,
         settings,
         iconPath: '/nonexistent/quickts/icons/quickts-symbolic.svg',
-        gettext: message => message,
+        gettext,
         chooseFiles:
             chooseFiles ??
             (options => {
@@ -54,9 +59,17 @@ export const deviceActionRows = (name = 'laptop') => {
     return devices.menu.items;
 };
 
-/** The text of the rows that have any — separators do not. */
+/**
+ * The text of the rows that have any — an unlabeled separator does not.
+ *
+ * tests/stubs/shell-popupmenu.js gives every PopupSeparatorMenuItem a `text`
+ * of '' rather than leaving it undefined, matching the real class, which can
+ * carry a heading. Neither modules/navigable-section.js nor modules/panel.js
+ * gives its separator one, so an empty string here is still "no label" and is
+ * filtered out the same as undefined was before.
+ */
 export const labelsOf = items =>
-    items.map(item => item.text).filter(text => text !== undefined);
+    items.map(item => item.text).filter(text => Boolean(text));
 
 /**
  * Every menu item anywhere under the toggle, by its text.

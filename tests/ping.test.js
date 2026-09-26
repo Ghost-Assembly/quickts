@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PING_TYPE, ROUTE, describePing } from '../modules/ping.js';
+import { PING_ISSUE, PING_TYPE, ROUTE, describePing } from '../modules/ping.js';
 import { pingRequest } from '../modules/localapi.js';
 
 // Shapes captured from a live daemon's /localapi/v0/ping, retyped here.
@@ -33,6 +33,7 @@ describe('describePing', () => {
         expect(describePing(DIRECT)).toEqual({
             ok: true,
             error: '',
+            issue: '',
             latencyMs: 0.76,
             route: ROUTE.DIRECT,
             relay: '',
@@ -69,6 +70,9 @@ describe('describePing', () => {
         ).toMatchObject({
             ok: false,
             error: 'no matching peer',
+            // The daemon's own text, not one of PING_ISSUE: a caller must
+            // show this as data and never pass it to gettext.
+            issue: '',
         });
     });
 
@@ -89,6 +93,7 @@ describe('describePing', () => {
 
         expect(result.ok).toBe(false);
         expect(result.error).toBe('No reply');
+        expect(result.issue).toBe(PING_ISSUE.NO_REPLY);
     });
 
     // A direct hop on a local network is well under a millisecond, so whole
@@ -113,5 +118,6 @@ describe('describePing', () => {
 
         expect(result.ok).toBe(false);
         expect(result.error).toMatch(/\S/);
+        expect(result.issue).toBe(PING_ISSUE.NO_RESPONSE);
     });
 });

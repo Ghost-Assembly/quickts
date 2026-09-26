@@ -18,7 +18,7 @@
 
 import { NOTHING_DIRTY, dirtyFrom, isDirty, mergeDirty, parseBusLine } from './bus.js';
 import { isCanceled } from './cancel.js';
-import { REASON, messageFor, reasonOf } from './errors.js';
+import { REASON, reasonOf } from './errors.js';
 import {
     currentProfileRequest,
     filePutRequest,
@@ -47,7 +47,7 @@ import {
 } from './state.js';
 import { isUp } from './health.js';
 import { displayName } from './peers.js';
-import { PING_TYPE, describePing } from './ping.js';
+import { PING_ISSUE, PING_TYPE, describePing } from './ping.js';
 import { withExitNode } from './routes.js';
 import { isSafeFileName, waitingFiles } from './inbox.js';
 import { fileNameOf } from './taildrop.js';
@@ -248,7 +248,12 @@ export class TailscaleModel {
      * question behind pinging a machine on a tailnet.
      *
      * @param {string} ip A Tailscale address of the peer.
-     * @returns {Promise<object>} The result, from modules/ping.js.
+     * @returns {Promise<object>} The result, from modules/ping.js. On a
+     *   transport failure `error` is a REASON code rather than daemon text or
+     *   English prose, and `issue` is PING_ISSUE.TRANSPORT — untranslated, so
+     *   modules/device-section.js can turn it into a literal `_()` call
+     *   through modules/menu-items.js's problemMessage rather than being
+     *   handed English composed at run time.
      */
     async ping(ip) {
         if (this.#disposed || !ip) return describePing(null);
@@ -262,7 +267,11 @@ export class TailscaleModel {
             // answer is a fact about that peer, not evidence that the daemon
             // has become unreachable, and marking the whole extension
             // unreachable over one dead node would be wrong.
-            return { ...describePing(null), error: messageFor(reasonOf(error)) };
+            return {
+                ...describePing(null),
+                error: reasonOf(error),
+                issue: PING_ISSUE.TRANSPORT,
+            };
         }
     }
 
@@ -294,15 +303,17 @@ export class TailscaleModel {
      * In that order. Deleting first loses the file if the write fails.
      *
      * @param {string} name The name as the daemon lists it.
-     * @returns {Promise<{path: string, error: string}>} Where it went, or why not.
+     * @returns {Promise<{path: string, error: string}>} Where it went, or a
+     *   REASON from modules/errors.js if it did not — untranslated, so
+     *   modules/taildrop-section.js can turn it into a literal `_()` call
+     *   rather than being handed English composed at run time.
      */
     async saveFile(name) {
         if (this.#disposed) return { path: '', error: '' };
 
         // The daemon listed a name that cannot be a plain file here. It is
         // left on the daemon, where `tailscale file get` can still reach it.
-        if (!isSafeFileName(name))
-            return { path: '', error: messageFor(REASON.PROTOCOL) };
+        if (!isSafeFileName(name)) return { path: '', error: REASON.PROTOCOL };
 
         try {
             const path = await this.#client.saveFile(getFileRequest(name), name);
@@ -312,7 +323,7 @@ export class TailscaleModel {
         } catch (error) {
             if (isCanceled(error)) return { path: '', error: '' };
 
-            return { path: '', error: messageFor(reasonOf(error)) };
+            return { path: '', error: reasonOf(error) };
         }
     }
 

@@ -1,11 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { REASON } from '../modules/errors.js';
+import { taildropReason } from '../modules/taildrop-section.js';
+import { TAILDROP } from '../modules/taildrop.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import * as Main from './stubs/shell-main.js';
+import { extractableMsgids } from './support/i18n.js';
 import { settle, setup, toggleOf, useShellStubs } from './support/panel.js';
 
 useShellStubs();
+
+// Every branch, the same way tests/taildrop.test.js exercises reasonFor's:
+// taildropReason mirrors it, but through a literal _() call per case.
+describe('taildropReason', () => {
+    it.each(Object.values(TAILDROP))('says something for status %i', status => {
+        expect(taildropReason(status, message => message)).toMatch(/\S/);
+    });
+
+    it('gives the same reason to every status the daemon means "unreachable" by', () => {
+        const unreachable = [
+            TAILDROP.NO_PEER_API,
+            TAILDROP.NO_PEER_INFO,
+            TAILDROP.NO_NETMAP,
+        ];
+
+        const reasons = new Set(
+            unreachable.map(status => taildropReason(status, message => message)),
+        );
+
+        expect(reasons.size).toBe(1);
+    });
+});
 
 describe('received files', () => {
     const withFiles = daemon => {
@@ -97,6 +122,43 @@ describe('received files', () => {
         expect(row.sensitive).toBe(true);
         expect(row.text).toMatch(/\S/);
     });
+
+    // modules/model.js's saveFile used to hand this row modules/errors.js's
+    // already-composed English (messageFor), and _(error) then asked gettext
+    // to translate a sentence it can never see when the .pot file is built —
+    // only a literal string reaches xgettext.
+    // REASON.PERMISSION_DENIED, not REASON.HTTP: its composed message
+    // embeds the fix-it command and so is the one reason whose text differs
+    // from its own literal — every other REASON's composed English happens
+    // to read exactly like the literal problemMessage returns for it, so a
+    // regression back to `_(error)` would still pass this test under any of
+    // them.
+    it('words a failed save only in a string a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        withFiles(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        daemon.failures.set('/localapi/v0/files/report.pdf', {
+            name: 'TransportError',
+            reason: REASON.PERMISSION_DENIED,
+        });
+
+        asked.length = 0;
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
+        expect(row.text).toContain('tailscale set --operator=');
+    });
 });
 
 describe('the file chooser failing', () => {
@@ -176,6 +238,31 @@ describe('taildrop', () => {
 
         expect(row.text).toContain('Offline');
         expect(row.sensitive).toBe(false);
+    });
+
+    // modules/taildrop.js's reasonFor composes the English directly, and
+    // handing it to _(reason) — what this replaced — asks gettext to
+    // translate a sentence it can never see when the .pot file is built.
+    it('words an ineligible node only in a string a translator is given', async () => {
+        const asked = [];
+        const gettext = message => (asked.push(message), message);
+        const { panel, model, daemon } = setup({ gettext });
+        withTarget(daemon);
+        daemon.responses.status.Peer = rawPeerMap(
+            rawPeer({ TaildropTarget: 1 }),
+            rawPeer({ ID: 'nOFF', DNSName: `sleeper.${SUFFIX}.`, TaildropTarget: 5 }),
+        );
+        panel.enable();
+        await model.start();
+        await settle();
+
+        asked.length = 0;
+        toggleOf().menu.open();
+        await settle();
+
+        expect(asked.length).toBeGreaterThan(0);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
     });
 
     it('asks for files and sends them', async () => {

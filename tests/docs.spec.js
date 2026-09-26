@@ -4,6 +4,10 @@
 // holds the page to are the Ghost Assembly docs template's: no JavaScript, no
 // request to another origin, WCAG 2.2 AA in both color schemes, no sideways
 // scrolling on a phone, and motion only when the reader allows it.
+//
+// This file is shared across the extensions. What is particular to one site —
+// its title, URL, repository, sections, and any extra checks — is in
+// tests/docs.config.js.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -11,28 +15,14 @@ import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+import config from './docs.config.js';
+
 const METADATA = fileURLToPath(new URL('../metadata.json', import.meta.url));
 // METADATA is a module-relative constant, not input of any kind.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const metadata = JSON.parse(readFileSync(METADATA, 'utf8'));
 
-const site = 'https://ghost-assembly.github.io/quickts/';
-const repo = 'https://github.com/Ghost-Assembly/quickts';
-
-const sections = [
-    ['overview', 'Overview'],
-    ['install', 'Install'],
-    ['menu', 'The menu'],
-    ['preferences', 'Preferences'],
-    ['keyboard', 'Keyboard shortcut'],
-    ['security', 'Security'],
-    ['architecture', 'Architecture'],
-    ['localapi', 'The LocalAPI'],
-    ['testing', 'Testing'],
-    ['packaging', 'Packaging'],
-    ['releasing', 'Releasing'],
-    ['development', 'Development'],
-];
+const { site, repo, title, sections } = config;
 
 const phone = { width: 390, height: 844 };
 
@@ -57,7 +47,7 @@ test('loads every asset from its own origin, without errors', async ({
     await page.evaluate(() => document.fonts.ready);
 
     expect(problems).toEqual([]);
-    await expect(page).toHaveTitle('QuickTS · Ghost Assembly');
+    await expect(page).toHaveTitle(`${title} · Ghost Assembly`);
 });
 
 test('ships no JavaScript', async ({ page }) => {
@@ -131,6 +121,16 @@ test.describe('agrees with metadata.json', () => {
     });
 });
 
+// The drawing claims to be the extension as GNOME shows it, so it must not show
+// what the extension does not do. What that means is particular to each
+// project, so docs.config.js supplies the checks, when it has any.
+if (config.drawing) {
+    test('draws only what the extension shows', async ({ page }) => {
+        await page.goto('/');
+        await config.drawing(page.locator('figure.shot'), expect);
+    });
+}
+
 test('numbers the sections in the order the contents list gives', async ({ page }) => {
     await page.goto('/');
 
@@ -154,19 +154,28 @@ test('numbers the sections in the order the contents list gives', async ({ page 
 });
 
 // README.md links into this page by fragment; those ids are a contract.
-test('keeps the ids README.md links to', async ({ page }) => {
-    const README = fileURLToPath(new URL('../README.md', import.meta.url));
-    // README is a module-relative constant, not input of any kind.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const readme = readFileSync(README, 'utf8');
-    const ids = [
-        ...readme.matchAll(/ghost-assembly\.github\.io\/quickts\/#([\w-]+)/g),
-    ].map(match => match[1]);
-    expect(ids.length).toBeGreaterThan(0);
+// docs.config.js opts out with `readmeLinks: false` while the README has none.
+if (config.readmeLinks !== false) {
+    test('keeps the ids README.md links to', async ({ page }) => {
+        const README = fileURLToPath(new URL('../README.md', import.meta.url));
+        // README is a module-relative constant, not input of any kind.
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const readme = readFileSync(README, 'utf8');
+        // The site's URL without its scheme, as a literal: a README may link
+        // with or without https://.
+        const host = site
+            .replace(/^https?:\/\//, '')
+            .replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+        // Built from docs.config.js, a module-relative constant, not input.
+        // eslint-disable-next-line security/detect-non-literal-regexp
+        const pattern = new RegExp(`${host}#([\\w-]+)`, 'g');
+        const ids = [...readme.matchAll(pattern)].map(match => match[1]);
+        expect(ids.length).toBeGreaterThan(0);
 
-    await page.goto('/');
-    for (const id of ids) await expect(page.locator(`#${id}`), id).toHaveCount(1);
-});
+        await page.goto('/');
+        for (const id of ids) await expect(page.locator(`#${id}`), id).toHaveCount(1);
+    });
+}
 
 test('in-page links land on real targets', async ({ page }) => {
     await page.goto('/');
@@ -193,7 +202,7 @@ test.describe('contents list', () => {
         await expect(page.locator('nav.toc')).toBeVisible();
         await expect(page.locator('details.toc-m')).toBeHidden();
 
-        await page.locator('#development').scrollIntoViewIfNeeded();
+        await page.locator(`#${sections.at(-1)[0]}`).scrollIntoViewIfNeeded();
         await expect(page.locator('nav.toc')).toBeInViewport();
     });
 

@@ -147,7 +147,7 @@ export function switchProfileRequest(id) {
  * nothing here does anything — whereas a logout is an administrative action
  * that invalidates the node key and needs another browser round trip to undo.
  * A row with that consequence does not belong two clicks from the volume
- * slider, and GNOME's quick settings offer nowhere sensible to confirm it.
+ * slider, and GNOME's Quick Settings offer nowhere sensible to confirm it.
  * `tailscale logout` is the right place for it.
  *
  * @returns {{method: string, path: string, body: object}} Request descriptor.

@@ -223,4 +223,16 @@ describe('problemOf', () => {
             /\S/,
         );
     });
+
+    // modules/menu-items.js's problemMessage switches on this, not on
+    // `message`, to translate the problem row and subtitle.
+    it('carries the untranslated reason for a caller to translate itself', () => {
+        expect(
+            problemOf(up({ reachable: false, errorReason: REASON.PERMISSION_DENIED }))
+                .reason,
+        ).toBe(REASON.PERMISSION_DENIED);
+        expect(problemOf(up({ reachable: false, errorReason: '' })).reason).toBe(
+            REASON.UNKNOWN,
+        );
+    });
 });

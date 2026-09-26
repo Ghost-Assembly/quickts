@@ -1,6 +1,12 @@
-// Meta, as far as modules/panel.js uses it.
+// Meta, as far as the extension uses it.
+//
+// Values match Mutter's where a test asserts on them; where they do not matter
+// they are distinct integers, so a mix-up shows up as a failure rather than a
+// coincidence. Tests compare against these constants, never the numbers.
 
 export default {
+    WindowType: { NORMAL: 0, DIALOG: 1, DOCK: 2 },
+
     KeyBindingFlags: { NONE: 0, IGNORE_AUTOREPEAT: 2 },
 
     // NONE is what addKeybinding returns when a keybinding of the same NAME

@@ -1,4 +1,4 @@
-// The actor tree: the quick settings tile, its menu, and the keybinding.
+// The actor tree: the Quick Settings tile, its menu, and the keybinding.
 //
 // This file and the section modules it builds — exit-node-section.js,
 // device-section.js and taildrop-section.js, with menu-items.js and
@@ -42,6 +42,7 @@ import {
     addRow,
     copyText,
     openUri,
+    problemMessage,
     warningRow,
 } from './menu-items.js';
 import { ExitNodeSection } from './exit-node-section.js';
@@ -308,7 +309,7 @@ const QuickTSToggle = GObject.registerClass(
             const problem = problemOf(state);
             if (problem) {
                 const item = new PopupMenu.PopupImageMenuItem(
-                    _(problem.message),
+                    problemMessage(problem.reason, _),
                     problem.actionable
                         ? 'dialog-warning-symbolic'
                         : 'network-offline-symbolic',
@@ -491,7 +492,7 @@ const QuickTSToggle = GObject.registerClass(
         /**
          * Measure the height again once the menu has actually been laid out.
          *
-         * Opened from the keybinding, quick settings and this menu open in
+         * Opened from the keybinding, Quick Settings and this menu open in
          * the same breath, and the position read in _applyMaxHeight is from
          * before the Shell has allocated either — on the first open of a
          * session it is 0, and the menu is allowed to run off the bottom of
@@ -503,11 +504,29 @@ const QuickTSToggle = GObject.registerClass(
          * nothing.
          */
         _remeasureOnceLaidOut() {
+            // A second request before the first fires must not leave both
+            // outstanding: the first's own later would then be scheduled
+            // under a `this._laterId` the second is about to overwrite, and
+            // a _cancelRemeasure() landing before either fires — the menu
+            // closing again first — would remove only the later `_laterId`
+            // still names, leaking the first's forever. Canceling whatever
+            // is pending before starting a new one keeps at most one of each
+            // outstanding at a time.
+            this._cancelRemeasure();
+
             const actor = this.menu.actor;
 
-            this._allocationId = actor.connect('notify::allocation', () => {
-                actor.disconnect(this._allocationId);
-                this._allocationId = 0;
+            // Captured in this closure rather than read back off
+            // this._allocationId at fire time: with the guard above, a
+            // second request can only run after this one either fired or was
+            // canceled — but reading the field back would still be wrong the
+            // moment a future caller skips _cancelRemeasure like this one
+            // used to, so this stays the belt to that guard's suspenders.
+            const allocationId = actor.connect('notify::allocation', () => {
+                actor.disconnect(allocationId);
+                // Only clear the field if it is still this request's — an
+                // overlapping second request has already moved it on.
+                if (this._allocationId === allocationId) this._allocationId = 0;
 
                 this._laterId = global.compositor
                     .get_laters()
@@ -517,6 +536,8 @@ const QuickTSToggle = GObject.registerClass(
                         return false;
                     });
             });
+
+            this._allocationId = allocationId;
         }
 
         /** Drop a re-measure that has not happened yet. */
@@ -549,7 +570,7 @@ const QuickTSToggle = GObject.registerClass(
             this.menu.disconnectObject(this);
             this.disconnectObject(this);
 
-            // The Shell parents this menu into the quick settings overlay and
+            // The Shell parents this menu into the Quick Settings overlay and
             // never destroys it (Shell 50.3 quickSettings.js has no destroy
             // call), so without this every disable — every screen lock —
             // would leave the menu behind, and with it the overlay's
@@ -655,7 +676,7 @@ export class Panel {
         this._bindings.push(SHORTCUT_KEYS.OPEN_MENU);
     }
 
-    /** Open quick settings with this tile's menu expanded. */
+    /** Open Quick Settings with this tile's menu expanded. */
     _openMenu() {
         const quickSettings = Main.panel.statusArea.quickSettings;
 
@@ -700,7 +721,7 @@ function subtitleFor(state, { _, _n }) {
 
     switch (kind) {
         case SUMMARY.ERROR:
-            return _(problemOf(state)?.message ?? 'Not connected');
+            return problemMessage(value, _);
         case SUMMARY.NEEDS_LOGIN:
             return _('Not logged in');
         case SUMMARY.IN_USE:
