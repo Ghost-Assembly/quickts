@@ -1,4 +1,4 @@
-// QuickTS — Tailscale in the GNOME quick settings menu.
+// QuickTS — Tailscale in the GNOME Quick Settings menu.
 //
 // This file is deliberately thin. It owns the cancellation token and wires the
 // three pieces together; every decision lives in a pure module under modules/.
@@ -6,7 +6,7 @@
 // Nothing here runs at import time. Creating an object, connecting a signal or
 // touching the Shell during module evaluation is forbidden by the review
 // guidelines, and is how an extension ends up holding a reference to the
-// quick settings panel across a disable.
+// Quick Settings panel across a disable.
 
 import {
     Extension,

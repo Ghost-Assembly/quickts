@@ -1,4 +1,4 @@
-// The actor tree: the quick settings tile, its menu, and the keybinding.
+// The actor tree: the Quick Settings tile, its menu, and the keybinding.
 //
 // This file and the section modules it builds — exit-node-section.js,
 // device-section.js and taildrop-section.js, with menu-items.js and
@@ -492,7 +492,7 @@ const QuickTSToggle = GObject.registerClass(
         /**
          * Measure the height again once the menu has actually been laid out.
          *
-         * Opened from the keybinding, quick settings and this menu open in
+         * Opened from the keybinding, Quick Settings and this menu open in
          * the same breath, and the position read in _applyMaxHeight is from
          * before the Shell has allocated either — on the first open of a
          * session it is 0, and the menu is allowed to run off the bottom of
@@ -570,7 +570,7 @@ const QuickTSToggle = GObject.registerClass(
             this.menu.disconnectObject(this);
             this.disconnectObject(this);
 
-            // The Shell parents this menu into the quick settings overlay and
+            // The Shell parents this menu into the Quick Settings overlay and
             // never destroys it (Shell 50.3 quickSettings.js has no destroy
             // call), so without this every disable — every screen lock —
             // would leave the menu behind, and with it the overlay's
@@ -676,7 +676,7 @@ export class Panel {
         this._bindings.push(SHORTCUT_KEYS.OPEN_MENU);
     }
 
-    /** Open quick settings with this tile's menu expanded. */
+    /** Open Quick Settings with this tile's menu expanded. */
     _openMenu() {
         const quickSettings = Main.panel.statusArea.quickSettings;
 

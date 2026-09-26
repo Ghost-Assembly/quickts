@@ -675,7 +675,7 @@ describe('the keybinding', () => {
         expect(toggleOf().menu.isOpen).toBe(true);
     });
 
-    // Opening quick settings and reading where the tile's menu sits in the
+    // Opening Quick Settings and reading where the tile's menu sits in the
     // same breath reads a position the Shell has not laid out yet. The height
     // is measured again once the menu has been allocated.
     it('measures the height again once the menu has been laid out', async () => {
@@ -1212,7 +1212,7 @@ describe('teardown', () => {
         expect(indicator._wasDestroyed).toBe(true);
     });
 
-    // The Shell parents the toggle's menu into the quick settings overlay and
+    // The Shell parents the toggle's menu into the Quick Settings overlay and
     // never destroys it, so the extension must, or every lock leaks one —
     // along with the toggle, model and transport its handlers still reach.
     it('destroys the tile menu the Shell leaves behind', () => {

@@ -264,7 +264,7 @@ export default class QuickTSPreferences extends ExtensionPreferences {
 
         const menu = new Adw.PreferencesGroup({
             title: _('Menu'),
-            description: _('What the quick settings menu lists.'),
+            description: _('What the Quick Settings menu lists.'),
         });
 
         // Titled from modules/settings.js, which is where a key is described,

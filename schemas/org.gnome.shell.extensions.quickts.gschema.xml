@@ -43,7 +43,7 @@
     <key type="as" name="quickts-open-menu">
       <default><![CDATA[[]]]></default>
       <summary>Open the QuickTS menu</summary>
-      <description>Open the quick settings menu with QuickTS expanded.</description>
+      <description>Open the Quick Settings menu with QuickTS expanded.</description>
     </key>
 
   </schema>
