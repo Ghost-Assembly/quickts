@@ -144,6 +144,8 @@ describe('received files', () => {
         expect(row.sensitive).toBe(false);
         expect(Main.osdMessages.at(-1).label).toBe('Saved report.pdf');
 
+        daemon.failures.clear();
+        daemon.reset();
         toggleOf().menu.close();
         toggleOf().menu.open();
         await settle();
@@ -153,6 +155,9 @@ describe('received files', () => {
         expect(rows[0]).toContain('notes.txt');
         expect(toggleOf()._inbox.label.text).toBe('1 received file');
         expect(daemon.saved).toHaveLength(1);
+        // Hidden, not deleted: it stays in Tailscale's inbox.
+        expect(daemon.pathsMatching('report.pdf')).toEqual([]);
+        expect(daemon.deleted).toEqual([]);
     });
 
     it('does not forget a file it could not save', async () => {

@@ -95,14 +95,12 @@ export class TailscaleModel {
     #peersReadAt = 0;
     #menuOpen = false;
 
-    /** Each waiting file's size as last listed, by name. */
-    #listedSizes = new Map();
-
     /**
      * Files saved here that tailscaled then would not delete, by name, with
-     * the size they were listed at. Hidden from waitingFiles, which asks the
-     * daemon to delete them again, so a saved file is never offered to save a
-     * second time.
+     * the size they were listed at. waitingFiles hides them, so a saved file
+     * is not offered, and saved as a duplicate, a second time. Nothing here
+     * deletes them: a name and a size are not proof that the file listed
+     * later is the one that was saved.
      */
     #savedNotDeleted = new Map();
 
@@ -326,39 +324,21 @@ export class TailscaleModel {
             return [];
         }
 
-        this.#listedSizes = new Map(files.map(({ name, size }) => [name, size]));
-        await this.#retryDeletes();
-
-        return files.filter(({ name }) => !this.#savedNotDeleted.has(name));
-    }
-
-    /**
-     * Ask tailscaled again to delete each file already saved here that is
-     * still listed.
-     *
-     * One no longer listed at the size it was saved at is dropped first: it
-     * is gone, and a file listed under that name now is a different one, not
-     * yet saved, that must be neither hidden nor deleted.
-     *
-     * @returns {Promise<void>} Done; a refusal leaves the file for next time.
-     */
-    async #retryDeletes() {
-        for (const [name, size] of this.#savedNotDeleted) {
-            if (this.#listedSizes.get(name) !== size) {
+        // Forget a saved file no longer listed at the size it was saved at: it
+        // has left the inbox, and a file listed under that name now is a
+        // different one, not yet saved.
+        const listed = new Map(files.map(({ name, size }) => [name, size]));
+        for (const [name, size] of this.#savedNotDeleted)
+            if (!listed.has(name) || listed.get(name) !== size)
                 this.#savedNotDeleted.delete(name);
-                continue;
-            }
 
-            try {
-                await this.#request(deleteFileRequest(name));
-                this.#savedNotDeleted.delete(name);
-            } catch (error) {
-                if (!isCanceled(error))
-                    console.debug(
-                        `[quickts] could not remove a saved file from Taildrop: ${reasonOf(error)}`,
-                    );
-            }
-        }
+        return files.filter(
+            ({ name, size }) =>
+                !(
+                    this.#savedNotDeleted.has(name) &&
+                    this.#savedNotDeleted.get(name) === size
+                ),
+        );
     }
 
     /**
@@ -368,16 +348,19 @@ export class TailscaleModel {
      *
      * Once the file is written, a delete that fails does not undo that: the
      * path is still returned, with no error, because the file is saved. The
-     * file stays in tailscaled's inbox, and waitingFiles hides it and asks
-     * again, so it is not offered, and saved as a duplicate, a second time.
+     * file stays in tailscaled's inbox, where `tailscale file get` can clear
+     * it; while this model lives, waitingFiles hides it, so it is not offered,
+     * and saved as a duplicate, a second time. Only a numeric size is
+     * recorded: without one there is nothing but the name to match.
      *
      * @param {string} name The name as the daemon lists it.
+     * @param {number} size Its size as the daemon lists it.
      * @returns {Promise<{path: string, error: string}>} Where it went, or a
      *   REASON from modules/errors.js if it did not — untranslated, so
      *   modules/taildrop-section.js can turn it into a literal `_()` call
      *   rather than being handed English composed at run time.
      */
-    async saveFile(name) {
+    async saveFile(name, size) {
         if (this.#disposed) return { path: '', error: '' };
 
         // The daemon listed a name that cannot be a plain file here. It is
@@ -396,7 +379,7 @@ export class TailscaleModel {
         try {
             await this.#request(deleteFileRequest(name));
         } catch (error) {
-            this.#savedNotDeleted.set(name, this.#listedSizes.get(name));
+            if (Number.isFinite(size)) this.#savedNotDeleted.set(name, size);
             if (!isCanceled(error))
                 console.debug(
                     `[quickts] saved a file but could not remove it from Taildrop: ${reasonOf(error)}`,

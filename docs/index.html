@@ -1793,10 +1793,12 @@
                                 </td>
                                 <td data-label="Used for" class="muted">
                                     Receiving, streamed to disk. The file is written
-                                    before the daemon is told to forget it; if the
-                                    daemon will not, the file still counts as saved, is
-                                    not offered again, and the delete is retried the
-                                    next time the menu opens.
+                                    before the daemon is told to forget it. If the
+                                    daemon will not, the file still counts as saved and
+                                    is not offered again while QuickTS runs. It stays in
+                                    Tailscale’s inbox, where
+                                    <code>tailscale file get</code> can clear it, and
+                                    after a reload it can be offered again.
                                 </td>
                             </tr>
                             <tr>
