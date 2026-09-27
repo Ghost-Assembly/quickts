@@ -1482,6 +1482,33 @@ describe('login', () => {
         expect(launchedUris).toEqual([]);
     });
 
+    // A login that went through without its URL ever reaching the menu — the
+    // browser was opened some other way, or someone ran `tailscale up` —
+    // left the flag set, and the next AuthURL, a reauth hours later, opened a
+    // browser nobody asked for.
+    it('does not stay armed once no login is needed', async () => {
+        const { panel, model, daemon } = setup();
+        loggedOut(daemon);
+        daemon.responses.status.AuthURL = '';
+        panel.enable();
+        await model.start();
+        await settle();
+
+        rowsNamed(toggleOf(), 'Log in…').at(0).activate();
+        await settle();
+
+        daemon.responses.status.BackendState = BACKEND.RUNNING;
+        await model.refresh();
+        await settle();
+
+        daemon.responses.status.BackendState = BACKEND.NEEDS_LOGIN;
+        daemon.responses.status.AuthURL = 'https://login.tailscale.com/a/later';
+        await model.refresh();
+        await settle();
+
+        expect(launchedUris).toEqual([]);
+    });
+
     // The URL comes from whatever control server the profile points at.
     it('refuses a login URL that is not http', async () => {
         const { panel, model, daemon } = setup();

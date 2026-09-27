@@ -263,6 +263,10 @@ const QuickTSToggle = GObject.registerClass(
             this.subtitle = subtitleFor(state, this._i18n);
             this.menu.setHeader(this._gicon, _('Tailscale'), this.subtitle);
 
+            // A login asked for is over once none is needed, however it went
+            // through. Left set, the next AuthURL for any reason at all — a
+            // reauth hours later — opens a browser nobody asked for.
+            if (!needsLogin(state)) this._loginRequested = false;
             this._maybeOpenAuthUrl(state);
 
             if (
