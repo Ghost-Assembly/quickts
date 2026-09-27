@@ -181,6 +181,9 @@ export class SendSection {
             showOsd(
                 this._gicon,
                 fill(
+                    // Translators: the placeholders are filled in order, the
+                    // count first and then the device name, so keep %d
+                    // before %s.
                     _n('Sent %d file to %s', 'Sent %d files to %s', sent),
                     sent,
                     node.name,
