@@ -125,6 +125,11 @@ const QuickTSToggle = GObject.registerClass(
                 (_menu, open) => this._onOpenStateChanged(open),
                 this,
             );
+
+            // A plain connect, as ButtonBox does: connectObject with this as
+            // its own owner could be released by the destroy it is meant to
+            // handle.
+            this.connect('destroy', () => this._onDestroy());
         }
 
         /** Build the sections once; their contents are refilled on each change. */
@@ -566,7 +571,9 @@ const QuickTSToggle = GObject.registerClass(
             this._laterId = 0;
         }
 
-        destroy() {
+        // From the destroy signal rather than a destroy() override, which an
+        // actor destroyed from C never calls.
+        _onDestroy() {
             // Invalidates any async handler still waiting — a ping, a Taildrop
             // listing — so it cannot write into the rows about to be torn down.
             this._deviceSection.destroy();
@@ -594,7 +601,6 @@ const QuickTSToggle = GObject.registerClass(
             // open-state-changed closure that still reaches this toggle, the
             // model and the transport.
             this.menu.destroy();
-            super.destroy();
         }
     },
 );

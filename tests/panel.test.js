@@ -1371,6 +1371,29 @@ describe('teardown', () => {
         expect(menu._wasDestroyed).toBe(true);
     });
 
+    // Clutter can destroy an actor straight from C, through its own dispose,
+    // which never calls back into an overridden JS destroy() — only the
+    // 'destroy' signal, which every actor emits either way. The model
+    // subscription and the settings handlers are the Panel's, released by
+    // disable() as the tests above check; this is everything the toggle holds.
+    it('releases what the toggle holds when the Shell destroys it directly', async () => {
+        const { panel, model } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        Main.press(SHORTCUT_KEYS.OPEN_MENU);
+        const toggle = toggleOf();
+        const menu = toggle.menu;
+        menu.actor.emit('notify::allocation');
+
+        toggle.emit('destroy');
+
+        expect(menu._wasDestroyed).toBe(true);
+        expect(laters.size).toBe(0);
+        // Clutter drops the handlers on the actor itself along with it.
+        expect([...liveHandlers].filter(id => !toggle.handlers.has(id))).toEqual([]);
+    });
+
     it('leaves no layout handler or later behind', async () => {
         const { panel, model } = setup();
         panel.enable();
