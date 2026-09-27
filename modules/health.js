@@ -153,9 +153,10 @@ export function summaryOf(state) {
 /**
  * The message for an unreachable daemon, and whether it is worth a row of its own.
  *
- * A permission failure is the one worth interrupting for: tailscaled answers
- * 403 to anyone who is not the tailscale operator, and one command fixes it —
- * a command nobody would otherwise discover from an empty menu.
+ * A permission failure is the one worth interrupting for: tailscaled refuses
+ * every change with a 403 from anyone who is not the tailscale operator, and
+ * one command fixes it — a command nobody would otherwise discover from a
+ * switch that just flips back.
  *
  * @param {object} state A snapshot.
  * @returns {{reason: string, command: string, actionable: boolean}|null}

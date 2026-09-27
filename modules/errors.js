@@ -23,7 +23,11 @@ export const REASON = Object.freeze({
     SOCKET_MISSING: 'socket-missing',
     /** The socket exists but nothing is listening. The daemon is stopped. */
     CONNECTION_REFUSED: 'connection-refused',
-    /** The socket refused us. Almost always the operator is not set. */
+    /**
+     * The daemon answered 401 or 403, or the socket itself refused us. Almost
+     * always the operator is not set: without it the daemon refuses every
+     * change with a 403.
+     */
     PERMISSION_DENIED: 'permission-denied',
     /** The daemon answered, with a status we cannot use. */
     HTTP: 'http',
@@ -183,9 +187,10 @@ export function commandFor(reason) {
  * on plain Node and from prefs.js, which cannot reach the Shell's modules — so
  * the preferences window words a failure exactly as the menu does.
  *
- * PERMISSION_DENIED is the one that earns its place. The daemon returns 403 to
- * a user who is not the tailscale operator, and an empty, apparently
- * disconnected menu would leave no way to discover that one command fixes it.
+ * PERMISSION_DENIED is the one that earns its place. The daemon refuses every
+ * change with a 403 from a user who is not the tailscale operator, and a
+ * switch that just flips back would leave no way to discover that one command
+ * fixes it.
  *
  * @param {string} reason One of {@link REASON}.
  * @param {Function} _ gettext.
