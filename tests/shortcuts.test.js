@@ -43,7 +43,7 @@ describe('isValidBinding', () => {
         expect(isValidBinding(mask, keyval, { ...gtk, codePoint })).toBe(false);
     });
 
-    // GNOME Settings' own rule: Shift alone is enough for a key that types
+    // Close to GNOME Settings' rule: Shift alone is enough for a key that types
     // nothing on its own — a function key has no code point, and Tab's is a
     // control character.
     it.each([

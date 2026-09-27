@@ -42,7 +42,7 @@ function typesVisibly(codePoint) {
  * Whether a captured combination may be bound as a global shortcut.
  *
  * A bare key would steal it from every application. Shift alone is bindable
- * only when the key types nothing on its own — GNOME Settings' own rule.
+ * only when the key types nothing on its own, close to GNOME Settings' rule.
  *
  * @param {number} mask Modifier mask, already reduced to the default mod mask.
  * @param {number} keyval Key value.
