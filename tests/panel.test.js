@@ -493,6 +493,59 @@ describe('the settings switches', () => {
         ]);
     });
 
+    // With the daemon already gone, the failure changes nothing but the
+    // count — and that has to be enough to set the switch back.
+    it('set themselves back when the daemon is already unreachable', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/', {
+            name: 'TransportError',
+            reason: REASON.CONNECTION_REFUSED,
+        });
+        await model.refresh();
+        await settle();
+        expect(model.state.errorReason).toBe(REASON.CONNECTION_REFUSED);
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(1);
+        expect(routes.state).toBe(false);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon is not running.',
+        ]);
+    });
+
+    // Someone who is not the operator gets a 403 for every change. The
+    // second is identical to the first, and has to set the switch back too.
+    it('set themselves back after a second 403', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.PERMISSION_DENIED,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(2);
+        expect(routes.state).toBe(false);
+        expect(
+            toggleOf()._problems.items.some(item =>
+                item.text?.includes('tailscale set --operator='),
+            ),
+        ).toBe(true);
+    });
+
     it('drop the refusal once a change goes through', async () => {
         const { panel, model, daemon } = setup();
         panel.enable();

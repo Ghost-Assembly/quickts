@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { REASON } from '../modules/errors.js';
 import { KEYS } from '../modules/settings.js';
@@ -161,6 +161,35 @@ describe('the exit node picker', () => {
             expect(toggleOf()._exitNode.label.text).toBe('Exit node: gateway');
             expect(toggleOf().subtitle).toBe('via gateway');
             expect(model.state.reachable).toBe(true);
+        });
+
+        // With the daemon already gone, the failure changes nothing but the
+        // count. The menu is still told, and redraws from the node in use.
+        it('re-syncs from the node in use when the daemon is already unreachable', async () => {
+            const { panel, model, daemon } = setup({ seed: withGateway() });
+            daemon.responses.prefs.ExitNodeID = 'nGATE';
+            panel.enable();
+            await model.start();
+            await settle();
+            daemon.failures.set('/localapi/v0/', {
+                name: 'TransportError',
+                reason: REASON.CONNECTION_REFUSED,
+            });
+            await model.refresh();
+            await settle();
+            const sync = vi.spyOn(toggleOf(), 'sync');
+
+            choose('None');
+            await settle();
+
+            expect(daemon.patches.at(-1)).toMatchObject({ ExitNodeID: '' });
+            expect(sync).toHaveBeenCalledTimes(1);
+            expect(sync.mock.calls[0][1]).toEqual(['refusedCount']);
+            expect(rows().find(item => item.text === 'gateway').icon).toBe(
+                'object-select-symbolic',
+            );
+            expect(rows().find(item => item.text === 'None').icon).toBe('');
+            expect(toggleOf()._exitNode.label.text).toBe('Exit node: gateway');
         });
     });
 

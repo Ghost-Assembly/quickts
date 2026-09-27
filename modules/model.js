@@ -38,6 +38,7 @@ import {
 } from './localapi.js';
 import { runWithReconnect } from './reconnect.js';
 import {
+    applyChangeError,
     applyError,
     applyPrefs,
     applyProfiles,
@@ -58,7 +59,7 @@ import { backoffDelay, flushDelay } from './timing.js';
 export const PEERS_STALE_MS = 60000;
 
 /**
- * The reasons a refused change still marks the daemon unreachable.
+ * The reasons a failed change still marks the daemon unreachable.
  *
  * Any other reason means the daemon answered: it refused the change, or said
  * something unusable about it, and is plainly still there. PERMISSION_DENIED
@@ -516,8 +517,11 @@ export class TailscaleModel {
      *
      * A change the daemon answered and refused leaves it reachable: one
      * refused change is not evidence that the daemon has gone. It is recorded
-     * with applyRefusal instead, which is also what sets a switch the user
-     * flipped back to the preference that still holds.
+     * with applyRefusal instead; any other failure marks the daemon
+     * unreachable, through applyChangeError. Both count the failed change,
+     * and that count is what sets a switch the user flipped back to the
+     * preference that still holds — even when nothing else in the state
+     * moved, as when the daemon was already unreachable for the same reason.
      *
      * @param {Record<string, unknown>} changes Preferences to set.
      * @returns {Promise<{error: string}>} '' once applied, or canceled;
@@ -535,8 +539,11 @@ export class TailscaleModel {
             if (isCanceled(error)) return { error: '' };
 
             const reason = reasonOf(error);
-            if (UNREACHABLE.has(reason)) this.#fail(error);
-            else this.#commit(applyRefusal(this.#state, reason));
+            this.#commit(
+                UNREACHABLE.has(reason)
+                    ? applyChangeError(this.#state, reason)
+                    : applyRefusal(this.#state, reason),
+            );
 
             return { error: reason };
         }

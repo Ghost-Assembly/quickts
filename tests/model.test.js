@@ -322,6 +322,51 @@ describe('commands', () => {
         expect(listener).toHaveBeenCalledTimes(2);
     });
 
+    // Already unreachable for the same reason, a failed change leaves every
+    // other field as it was. Only its being counted tells the menu to look
+    // again and set back the switch that was flipped.
+    it.each([REASON.CONNECTION_REFUSED, REASON.PERMISSION_DENIED])(
+        'tells subscribers about a change that fails with %s, already recorded',
+        async reason => {
+            const { model, daemon } = setup();
+            await model.start();
+            daemon.failures.set('/localapi/v0/', new TransportError(reason, 'no'));
+            await model.refresh();
+            expect(model.state.errorReason).toBe(reason);
+            const before = model.state.refusedCount;
+            const listener = vi.fn();
+            model.subscribe(listener);
+
+            await expect(model.setShieldsUp(true)).resolves.toEqual({ error: reason });
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            expect(listener.mock.calls[0][1]).toEqual(['refusedCount']);
+            expect(model.state.refusedCount).toBe(before + 1);
+            expect(model.state.reachable).toBe(false);
+            expect(model.state.errorReason).toBe(reason);
+            expect(model.state.refusedReason).toBe('');
+        },
+    );
+
+    // One notification, not two: the error and the count land together.
+    it('tells subscribers once about a change that finds the daemon gone', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set(
+            '/localapi/v0/prefs',
+            new TransportError(REASON.CONNECTION_REFUSED, 'refused'),
+        );
+        const listener = vi.fn();
+        model.subscribe(listener);
+
+        await model.setShieldsUp(true);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener.mock.calls[0][1]).toEqual(
+            expect.arrayContaining(['reachable', 'errorReason', 'refusedCount']),
+        );
+    });
+
     // A disable in the middle of a change is teardown, not a refusal.
     it('reports nothing for a change canceled in flight', async () => {
         const { model, daemon } = setup();

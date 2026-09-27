@@ -28,10 +28,12 @@ export function initialState() {
         reachable: false,
         errorReason: '',
 
-        // Why the daemon, reachable, last refused a change, and how many
-        // times it has. The count is what makes a second identical refusal a
-        // change of its own; see applyRefusal().
+        // Why the daemon, reachable, last refused a change. Set only for a
+        // refusal; an unreachable daemon is errorReason's to report.
         refusedReason: '',
+        // Every change that failed, refused or unreachable alike. The count is
+        // what makes a failure that leaves every other field as it was a
+        // change of its own; see applyRefusal() and applyChangeError().
         refusedCount: 0,
 
         // From /status.
@@ -234,9 +236,9 @@ export function applyError(state, reason) {
  * It answered, so it is still reachable and everything already read still
  * holds; the change just did not happen. The menu sets a flipped switch back
  * from the unchanged preferences whenever it is told something moved, so the
- * count moves on every refusal: a second one with the same reason would
- * otherwise change nothing, tell nobody, and leave the switch showing what
- * the daemon refused.
+ * count moves on every failed change: a second refusal with the same reason
+ * would otherwise change nothing, tell nobody, and leave the switch showing
+ * what the daemon refused.
  *
  * @param {object} state Current state.
  * @param {string} reason One of {@link REASON}.
@@ -246,6 +248,28 @@ export function applyRefusal(state, reason) {
     return derive({
         ...state,
         refusedReason: reason || REASON.UNKNOWN,
+        refusedCount: state.refusedCount + 1,
+    });
+}
+
+/**
+ * Record a change that failed because the daemon could not be reached.
+ *
+ * applyError, with the change counted as applyRefusal counts one, in a single
+ * snapshot so subscribers hear about it once. The count matters most when the
+ * daemon was already unreachable for the same reason — a stopped tailscaled,
+ * a user who is not the operator — because then nothing else moves, and
+ * without it the switch that was flipped would stay flipped.
+ *
+ * @param {object} state Current state.
+ * @param {string} reason One of {@link REASON}.
+ * @returns {object} A new state.
+ */
+export function applyChangeError(state, reason) {
+    return derive({
+        ...state,
+        reachable: false,
+        errorReason: reason || REASON.UNKNOWN,
         refusedCount: state.refusedCount + 1,
     });
 }

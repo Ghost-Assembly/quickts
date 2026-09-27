@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { REASON } from '../modules/errors.js';
 import {
     BACKEND,
+    applyChangeError,
     applyError,
     applyPrefs,
     applyProfiles,
@@ -341,6 +342,44 @@ describe('applyRefusal', () => {
 
         expect(read.refusedReason).toBe('');
         expect(changed(refused, read)).toEqual(['refusedReason']);
+    });
+});
+
+describe('applyChangeError', () => {
+    it('marks the daemon unreachable, as applyError does', () => {
+        const loaded = applyPrefs(applyStatus(initialState(), status()), prefs());
+        const failed = applyChangeError(loaded, REASON.CONNECTION_REFUSED);
+
+        expect(failed.reachable).toBe(false);
+        expect(failed.errorReason).toBe(REASON.CONNECTION_REFUSED);
+        expect(failed.nodes).toHaveLength(1);
+        expect(failed.running).toBe(true);
+    });
+
+    // A refusal's message is the daemon answering; this is the daemon gone.
+    it('counts the change without calling it a refusal', () => {
+        const failed = applyChangeError(initialState(), REASON.PERMISSION_DENIED);
+
+        expect(failed.refusedCount).toBe(initialState().refusedCount + 1);
+        expect(failed.refusedReason).toBe('');
+    });
+
+    it('falls back to unknown for an empty reason', () => {
+        expect(applyChangeError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
+    });
+
+    // Already unreachable for the same reason — a stopped daemon, a user who
+    // is not the operator — the count is the only thing that moves, and it
+    // has to be enough for the menu to set a flipped switch back.
+    it('registers a failure identical to the recorded one as a change', () => {
+        const down = applyError(
+            applyPrefs(initialState(), prefs()),
+            REASON.PERMISSION_DENIED,
+        );
+
+        expect(changed(down, applyChangeError(down, REASON.PERMISSION_DENIED))).toEqual(
+            ['refusedCount'],
+        );
     });
 });
 

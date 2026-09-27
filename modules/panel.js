@@ -228,9 +228,9 @@ const QuickTSToggle = GObject.registerClass(
                 // The switch reports what the user asked for; the daemon's
                 // answer comes back through the model and is what finally
                 // sets the state. A refused change therefore reverts: the
-                // model counts every refusal, so even a repeat of the last
-                // one is a change, and _syncOptions sets the switch back from
-                // the preferences that still hold.
+                // model counts every failed change, so even one that moves
+                // nothing else is a change, and _syncOptions sets the switch
+                // back from the preferences that still hold.
                 item.connectObject(
                     'toggled',
                     (_item, value) => void apply(value),
