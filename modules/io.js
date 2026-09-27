@@ -16,7 +16,7 @@ import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
 import { CanceledError } from './cancel.js';
-import { REASON, TransportError } from './errors.js';
+import { REASON, TransportError, reasonForIoError } from './errors.js';
 import { candidateNames, isSafeFileName } from './inbox.js';
 import { HOST, SOCKET_PATHS, pickSocket } from './localapi.js';
 
@@ -49,25 +49,26 @@ const REQUEST = 'org.freedesktop.portal.Request';
  * is also where a canceled operation stops looking like a failure. Getting
  * that wrong would make every disable() log an error.
  *
+ * Which reason a Gio code stands for is modules/errors.js's reasonForIoError;
+ * this only reads the code off the GError.
+ *
  * @param {unknown} error Caught value.
+ * @param {{local?: boolean, remote?: boolean}} [where] What the failed
+ *   operation touched, as reasonForIoError takes it. The daemon by default.
  * @returns {Error} A CanceledError or a TransportError.
  */
-function translate(error) {
+function translate(error, where = {}) {
     if (error?.name === 'CanceledError' || error?.name === 'TransportError')
         return error;
 
-    if (error instanceof Gio.IOErrorEnum || typeof error?.matches === 'function') {
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-            return new CanceledError();
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
-            return transportError(REASON.SOCKET_MISSING, error);
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_REFUSED))
-            return transportError(REASON.CONNECTION_REFUSED, error);
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED))
-            return transportError(REASON.PERMISSION_DENIED, error);
-    }
+    // GJS gives every Error a matches(), which is false for anything but a
+    // GError of that domain — so a plain exception gets no code at all.
+    if (error?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+        return new CanceledError();
 
-    return transportError(REASON.UNKNOWN, error);
+    const code = error?.matches?.(Gio.IOErrorEnum, error.code) ? error.code : null;
+
+    return transportError(reasonForIoError(code, Gio.IOErrorEnum, where), error);
 }
 
 /**
@@ -614,22 +615,30 @@ export function createIo({ token }) {
                         );
                         break;
                     } catch (error) {
+                        // Only the file was involved, so any other failure
+                        // is the file's, never the daemon's.
                         if (!error?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS))
-                            throw error;
+                            throw translate(error, { local: true, remote: false });
                         file = null;
                     }
                 }
 
                 if (!output)
-                    throw new TransportError(REASON.UNKNOWN, 'no free file name');
+                    throw new TransportError(REASON.LOCAL_FILE, 'no free file name');
 
-                await output.splice_async(
-                    input,
-                    Gio.OutputStreamSpliceFlags.CLOSE_SOURCE |
-                        Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
-                    GLib.PRIORITY_DEFAULT,
-                    cancellable,
-                );
+                // From the daemon's stream into the file, so a failure may be
+                // either's; reasonForIoError tells them apart by the code.
+                try {
+                    await output.splice_async(
+                        input,
+                        Gio.OutputStreamSpliceFlags.CLOSE_SOURCE |
+                            Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
+                        GLib.PRIORITY_DEFAULT,
+                        cancellable,
+                    );
+                } catch (error) {
+                    throw translate(error, { local: true });
+                }
 
                 return file.get_path();
             } catch (error) {

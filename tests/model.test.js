@@ -998,6 +998,25 @@ describe('waiting files', () => {
         expect(daemon.deleted).toEqual([]);
     });
 
+    // A full disk or an unwritable download directory is not the daemon's
+    // fault, and saying the daemon could not be reached sends someone to
+    // restart a service that is working.
+    it('reports a file it could not write here as a local failure', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set(
+            '/localapi/v0/files/a.txt',
+            new TransportError(REASON.LOCAL_FILE, 'No space left on device'),
+        );
+
+        const result = await model.saveFile('a.txt');
+
+        expect(Object.values(REASON)).toContain(result.error);
+        expect(result.error).toBe(REASON.LOCAL_FILE);
+        expect(daemon.deleted).toEqual([]);
+        expect(model.state.reachable).toBe(true);
+    });
+
     it('reports an unreadable list as nothing waiting', async () => {
         const { model, daemon } = setup();
         await model.start();

@@ -134,6 +134,8 @@ export function problemMessage(reason, _) {
             return _('The Tailscale daemon refused the request.');
         case REASON.PROTOCOL:
             return _('The Tailscale daemon sent an unexpected response.');
+        case REASON.LOCAL_FILE:
+            return _('Could not save the file.');
         default:
             return _('Could not reach the Tailscale daemon.');
     }

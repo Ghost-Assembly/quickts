@@ -123,6 +123,31 @@ describe('received files', () => {
         expect(row.text).toMatch(/\S/);
     });
 
+    // Not "Could not reach the Tailscale daemon": the daemon handed the file
+    // over, and it was the write here that failed.
+    it('says the file could not be saved when the write here fails', async () => {
+        const { panel, model, daemon } = setup();
+        withFiles(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        daemon.failures.set('/localapi/v0/files/report.pdf', {
+            name: 'TransportError',
+            reason: REASON.LOCAL_FILE,
+        });
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(row.text).toBe('Could not save the file.');
+        expect(row.sensitive).toBe(true);
+        expect(daemon.deleted).toEqual([]);
+    });
+
     // modules/model.js's saveFile used to hand this row modules/errors.js's
     // already-composed English (messageFor), and _(error) then asked gettext
     // to translate a sentence it can never see when the .pot file is built —

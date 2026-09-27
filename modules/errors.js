@@ -1,11 +1,12 @@
 // What went wrong talking to tailscaled, as a value rather than a string.
 //
-// This file imports nothing. modules/io.js is the only place that can tell a
-// Gio.IOErrorEnum apart from an HTTP status, because it is the only place with
-// Gio in scope, so it does that translation and throws one of these. Everything
-// downstream — the reducer, the menu, the tests — reasons about the symbol.
+// This file imports nothing. modules/io.js is the only place with Gio in
+// scope, so it reads the code off a GError and hands it here, with
+// Gio.IOErrorEnum passed in rather than imported; the reason is decided here
+// and io.js throws it. Everything downstream — the reducer, the menu, the
+// tests — reasons about the symbol.
 //
-// The division is deliberate: io.js knows Gio, this file knows what to say.
+// The division is deliberate: io.js knows Gio, this file knows what it means.
 
 /**
  * Why a request failed.
@@ -24,6 +25,8 @@ export const REASON = Object.freeze({
     HTTP: 'http',
     /** The daemon answered with something that is not what it claimed to be. */
     PROTOCOL: 'protocol',
+    /** A file here could not be written: a full disk, an unwritable directory. */
+    LOCAL_FILE: 'local-file',
     /** Anything else. */
     UNKNOWN: 'unknown',
 });
@@ -60,6 +63,56 @@ export function reasonOf(error) {
     return error?.name === 'TransportError' ? error.reason : REASON.UNKNOWN;
 }
 
+/**
+ * The reason to report for a failed Gio operation.
+ *
+ * A socket and a file fail with the same codes and mean different things by
+ * them. NOT_FOUND is no daemon on the one and no download directory on the
+ * other; PERMISSION_DENIED is a missing operator on the one and a directory
+ * this user cannot write on the other. Only the caller knows which it was
+ * talking to, so it says.
+ *
+ * Gio.IOErrorEnum is passed in, as prefs.js passes its Gtk values to
+ * modules/shortcuts.js, so this stays importable on plain Node.
+ *
+ * @param {number|null} code The GError's code, or null when the error is not
+ *   one of Gio.IOErrorEnum's.
+ * @param {object} IOErrorEnum Gio.IOErrorEnum.
+ * @param {object} [where] What the failed operation touched.
+ * @param {boolean} [where.local] A file on this machine.
+ * @param {boolean} [where.remote] The daemon: its socket, or a stream from it.
+ * @returns {string} One of {@link REASON}.
+ */
+export function reasonForIoError(
+    code,
+    IOErrorEnum,
+    { local = false, remote = true } = {},
+) {
+    // Creating a file touches nothing else, so whatever failed, it was the file.
+    if (local && !remote) return REASON.LOCAL_FILE;
+
+    // A copy from the daemon's stream into a file. The connection is already
+    // open by then, so these can only be the file's; the rest are the stream's.
+    const fileSystem = [
+        IOErrorEnum.NO_SPACE,
+        IOErrorEnum.READ_ONLY,
+        IOErrorEnum.PERMISSION_DENIED,
+        IOErrorEnum.NOT_FOUND,
+    ];
+    if (local && fileSystem.includes(code)) return REASON.LOCAL_FILE;
+
+    switch (code) {
+        case IOErrorEnum.NOT_FOUND:
+            return REASON.SOCKET_MISSING;
+        case IOErrorEnum.CONNECTION_REFUSED:
+            return REASON.CONNECTION_REFUSED;
+        case IOErrorEnum.PERMISSION_DENIED:
+            return REASON.PERMISSION_DENIED;
+        default:
+            return REASON.UNKNOWN;
+    }
+}
+
 /** The one command that fixes a permission failure. */
 const OPERATOR_COMMAND = 'sudo tailscale set --operator=$USER';
 
@@ -88,6 +141,8 @@ export function messageFor(reason) {
             return 'The Tailscale daemon refused the request.';
         case REASON.PROTOCOL:
             return 'The Tailscale daemon sent an unexpected response.';
+        case REASON.LOCAL_FILE:
+            return 'Could not save the file.';
         default:
             return 'Could not reach the Tailscale daemon.';
     }
