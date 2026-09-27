@@ -51,6 +51,12 @@ describe('isValidBinding', () => {
         expect(isValidBinding(SHIFT, F5, { ...gtk, codePoint: 0 })).toBe(true);
     });
 
+    // Delete has a code point (0x7f), unlike F5, but a control character, so
+    // this exercises the \p{Cc} half of the rule rather than codePoint <= 0.
+    it('accepts Shift+Delete, since Delete types a control character', () => {
+        expect(isValidBinding(SHIFT, 0xffff, { ...gtk, codePoint: 0x7f })).toBe(true);
+    });
+
     // Shift with these selects text, moves focus or ends a line in every
     // application, though none of them types a visible character. Keyvals and
     // code points as Gdk 4 gives them (Gdk.KEY_*, Gdk.keyval_to_unicode) under
@@ -90,10 +96,13 @@ describe('isValidBinding', () => {
         expect(isValidBinding(SHIFT, keyval, { ...gtk, codePoint: 0 })).toBe(false);
     });
 
-    // The same keys stay bindable with a modifier other than Shift.
+    // The same keys stay bindable with a modifier other than Shift. Not Tab:
+    // Gtk.accelerator_valid refuses Tab with any modifier, so a Tab case here
+    // would pass only because acceleratorValid is stubbed.
     it.each([
         ['Ctrl+Left', CONTROL, LEFT, 0],
-        ['Super+Tab', SUPER, TAB, 0x09],
+        ['Super+Left', SUPER, LEFT, 0],
+        ['Ctrl+Return', CONTROL, 0xff0d, 0x0d],
     ])('accepts %s', (_reason, mask, keyval, codePoint) => {
         expect(isValidBinding(mask, keyval, { ...gtk, codePoint })).toBe(true);
     });
