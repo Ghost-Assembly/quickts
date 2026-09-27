@@ -93,8 +93,14 @@ function derive(state) {
             : { ...node, isExitNode: node.id !== '' && node.id === state.exitNodeId },
     );
 
-    // Re-sorted because the exit node sorts first, and it may have moved.
-    const nodes = sortNodes(marked);
+    // Re-sorted because the exit node sorts first, and it may have moved —
+    // but only if a node was re-marked. The nodes arrive sorted, from
+    // normalizePeers or from the last derive, and nothing else here moves
+    // one, so an unchanged list is kept as the same array: no sort, and
+    // changed() can settle 'nodes' by identity.
+    const nodes = marked.every((node, index) => node === state.nodes.at(index))
+        ? state.nodes
+        : sortNodes(marked);
 
     return Object.freeze({
         ...state,
@@ -324,10 +330,12 @@ const SCALARS = Object.freeze([
     ['currentProfileId', s => s.currentProfileId],
 ]);
 
-// All three list comparisons are the same shape — equal lengths, then
-// element-wise — so only the per-element test is written out.
+// All three list comparisons are the same shape — the same array, or equal
+// lengths and then element-wise — so only the per-element test is written
+// out.
 const sameBy = (a, b, equal) =>
-    a.length === b.length && a.every((value, index) => equal(value, b.at(index)));
+    a === b ||
+    (a.length === b.length && a.every((value, index) => equal(value, b.at(index))));
 
 const sameStrings = (a, b) => sameBy(a, b, (value, other) => value === other);
 

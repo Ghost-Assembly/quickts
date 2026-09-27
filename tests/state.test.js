@@ -221,6 +221,18 @@ describe('exitNodeName', () => {
 
         expect(state.nodes.at(0).id).toBe('nLAP');
     });
+
+    // Every preferences read went through a sort that could change nothing.
+    // Keeping the same array also lets changed() settle 'nodes' by identity.
+    it('keeps the very same nodes when the exit node did not move', () => {
+        const before = applyPrefs(withPeers(), prefs({ ExitNodeID: 'nGATE' }));
+        const after = applyPrefs(
+            before,
+            prefs({ ExitNodeID: 'nGATE', ShieldsUp: true }),
+        );
+
+        expect(after.nodes).toBe(before.nodes);
+    });
 });
 
 describe('applyProfiles', () => {
