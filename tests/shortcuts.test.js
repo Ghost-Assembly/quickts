@@ -12,10 +12,12 @@ import {
 // Stand-ins for the Gdk and Gtk values prefs.js passes in.
 const SHIFT = 1;
 const CONTROL = 4;
+const SUPER = 0x4000000;
 const ESCAPE = 0xff1b;
 const BACKSPACE = 0xff08;
 const F5 = 0xffc2;
 const TAB = 0xff09;
+const LEFT = 0xff51;
 
 const gtk = {
     escapeKey: ESCAPE,
@@ -43,14 +45,57 @@ describe('isValidBinding', () => {
         expect(isValidBinding(mask, keyval, { ...gtk, codePoint })).toBe(false);
     });
 
-    // Close to GNOME Settings' rule: Shift alone is enough for a key that types
-    // nothing on its own — a function key has no code point, and Tab's is a
-    // control character.
+    // Shift alone is enough for a key that types nothing on its own and that
+    // editing text does not need: a function key has no code point at all.
+    it('accepts Shift+F5', () => {
+        expect(isValidBinding(SHIFT, F5, { ...gtk, codePoint: 0 })).toBe(true);
+    });
+
+    // Shift with these selects text, moves focus or ends a line in every
+    // application, though none of them types a visible character. Keyvals and
+    // code points as Gdk 4 gives them (Gdk.KEY_*, Gdk.keyval_to_unicode) under
+    // gjs; ISO_Left_Tab is what GTK reports for Shift+Tab, and dead_acute is a
+    // dead key, which types the accent over the next letter.
     it.each([
-        ['Shift+F5', F5, 0],
-        ['Shift+Tab', TAB, 0x09],
-    ])('accepts %s', (_reason, keyval, codePoint) => {
-        expect(isValidBinding(SHIFT, keyval, { ...gtk, codePoint })).toBe(true);
+        ['Left', LEFT, 0],
+        ['Up', 0xff52, 0],
+        ['Right', 0xff53, 0],
+        ['Down', 0xff54, 0],
+        ['Home', 0xff50, 0],
+        ['End', 0xff57, 0],
+        ['Page_Up', 0xff55, 0],
+        ['Page_Down', 0xff56, 0],
+        ['Tab', TAB, 0x09],
+        ['ISO_Left_Tab', 0xfe20, 0],
+        ['Return', 0xff0d, 0x0d],
+        ['KP_Enter', 0xff8d, 0],
+        ['Mode_switch', 0xff7e, 0],
+        ['dead_acute', 0xfe51, 0],
+    ])(
+        'rejects Shift+%s, which applications need for editing text',
+        (_name, keyval, codePoint) => {
+            expect(isValidBinding(SHIFT, keyval, { ...gtk, codePoint })).toBe(false);
+        },
+    );
+
+    // The ends of each run of dead keys.
+    it.each([
+        ['dead_grave', 0xfe50],
+        ['dead_currency', 0xfe6f],
+        ['dead_a', 0xfe80],
+        ['dead_hamza', 0xfe8d],
+        ['dead_lowline', 0xfe90],
+        ['dead_longsolidusoverlay', 0xfe93],
+    ])('rejects Shift+%s, a dead key', (_name, keyval) => {
+        expect(isValidBinding(SHIFT, keyval, { ...gtk, codePoint: 0 })).toBe(false);
+    });
+
+    // The same keys stay bindable with a modifier other than Shift.
+    it.each([
+        ['Ctrl+Left', CONTROL, LEFT, 0],
+        ['Super+Tab', SUPER, TAB, 0x09],
+    ])('accepts %s', (_reason, mask, keyval, codePoint) => {
+        expect(isValidBinding(mask, keyval, { ...gtk, codePoint })).toBe(true);
     });
 
     it('defers to Gtk on what is a valid accelerator', () => {
