@@ -11,15 +11,18 @@ import { nonLiteralGettextCalls } from './support/i18n.js';
 // from the same wording — would pass those tests even with the bug back:
 // `_(reason)` and `taildropReason(status, _)` show identical text under
 // `gettext: message => message`. Only reading the source tells them apart.
-describe('gettext calls under modules/', () => {
+// prefs.js among them: no test runs it, so this is the only check its strings
+// get, and it used to hand gettext settings labels and composed error
+// sentences that xgettext never sees.
+describe('gettext calls under modules/, prefs.js and extension.js', () => {
     it('never takes a variable, property or template as its message', () => {
         expect(nonLiteralGettextCalls()).toEqual([]);
     });
 });
 
-// A scratch probe over synthetic sources, not modules/ — the scenario above
-// can only prove today's code is clean; it says nothing about whether the
-// checker would catch a regression. `_n()`'s plural argument is pulled out by
+// A scratch probe over synthetic sources, not the shipped files — the
+// scenario above can only prove today's code is clean; it says nothing about
+// whether the checker would catch a regression. `_n()`'s plural argument is pulled out by
 // xgettext (-k_n:1,2) exactly like its first, so a variable there is exactly
 // as invisible, and a checker that only ever looked at the first argument
 // would pass a file with the bug back in it.

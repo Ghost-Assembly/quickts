@@ -149,7 +149,7 @@ describe('received files', () => {
     });
 
     // modules/model.js's saveFile used to hand this row modules/errors.js's
-    // already-composed English (messageFor), and _(error) then asked gettext
+    // already-composed English, and _(error) then asked gettext
     // to translate a sentence it can never see when the .pot file is built —
     // only a literal string reaches xgettext.
     // REASON.PERMISSION_DENIED, not REASON.HTTP: its composed message

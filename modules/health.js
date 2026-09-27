@@ -14,7 +14,7 @@
 //
 // This file imports only other pure modules.
 
-import { REASON, commandFor, isActionable, messageFor } from './errors.js';
+import { REASON, commandFor, isActionable } from './errors.js';
 import { BACKEND } from './state.js';
 
 /** How many health warnings to show before summarizing the rest. */
@@ -158,11 +158,10 @@ export function summaryOf(state) {
  * a command nobody would otherwise discover from an empty menu.
  *
  * @param {object} state A snapshot.
- * @returns {{reason: string, message: string, command: string, actionable: boolean}|null}
+ * @returns {{reason: string, command: string, actionable: boolean}|null}
  *   `reason` is untranslated, a REASON from modules/errors.js — the key
- *   modules/menu-items.js's problemMessage switches on to translate it.
- *   `message` is messageFor(reason)'s own composed English. The command that
- *   fixes it if there is one, or null if the daemon is reachable.
+ *   modules/errors.js's problemMessage switches on to translate it. The
+ *   command that fixes it if there is one, or null if the daemon is reachable.
  */
 export function problemOf(state) {
     if (state.reachable) return null;
@@ -171,7 +170,6 @@ export function problemOf(state) {
 
     return {
         reason,
-        message: messageFor(reason),
         command: commandFor(reason),
         actionable: isActionable(reason),
     };

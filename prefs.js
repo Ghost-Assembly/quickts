@@ -19,27 +19,17 @@ import {
 } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import { CancelToken } from './modules/cancel.js';
-import { messageFor, reasonOf } from './modules/errors.js';
+import { problemMessage, reasonOf } from './modules/errors.js';
 import { createIo } from './modules/io.js';
 import { patchPrefsRequest, prefsRequest } from './modules/localapi.js';
 import { parseRoutes, subnetRoutes, withSubnets } from './modules/routes.js';
-import { KEYS, SETTINGS, SHORTCUT_KEYS } from './modules/settings.js';
+import { KEYS, SHORTCUT_KEYS, settingText } from './modules/settings.js';
 import {
     CAPTURE_ASSIGN,
     CAPTURE_CANCEL,
     CAPTURE_CLEAR,
     captureOutcome,
 } from './modules/shortcuts.js';
-
-/**
- * How modules/settings.js describes one key.
- *
- * @param {string} key A key from KEYS or SHORTCUT_KEYS.
- * @returns {{label: string, detail: string}} Its untranslated wording.
- */
-function describe(key) {
-    return SETTINGS.find(setting => setting.key === key);
-}
 
 // The Gdk and Gtk values modules/shortcuts.js needs. Passed in rather than
 // imported there, so the rules themselves stay testable on plain Node.
@@ -216,7 +206,7 @@ const RoutesRow = GObject.registerClass(
                 this.text = subnetRoutes(prefs.AdvertiseRoutes).join(', ');
             } catch (error) {
                 this.sensitive = false;
-                this._say(_(messageFor(reasonOf(error))));
+                this._say(problemMessage(reasonOf(error), _));
                 console.warn(`[quickts] could not read routes: ${error}`);
             }
         }
@@ -247,7 +237,7 @@ const RoutesRow = GObject.registerClass(
                 );
                 this._say(_('Advertised subnets updated'));
             } catch (error) {
-                this._say(_(messageFor(reasonOf(error))));
+                this._say(problemMessage(reasonOf(error), _));
                 console.warn(`[quickts] could not set routes: ${error}`);
             }
         }
@@ -270,10 +260,10 @@ export default class QuickTSPreferences extends ExtensionPreferences {
         // Titled from modules/settings.js, which is where a key is described,
         // and bound the one way every row is bound.
         const addRow = (group, key, row, property) => {
-            const { label, detail } = describe(key);
+            const { label, detail } = settingText(key, _);
 
-            row.title = _(label);
-            row.subtitle = _(detail);
+            row.title = label;
+            row.subtitle = detail;
             settings.bind(key, row, property, Gio.SettingsBindFlags.DEFAULT);
             group.add(row);
         };
@@ -324,12 +314,13 @@ export default class QuickTSPreferences extends ExtensionPreferences {
         page.add(routing);
 
         const shortcut = new Adw.PreferencesGroup({ title: _('Keyboard shortcut') });
+        const openMenu = settingText(SHORTCUT_KEYS.OPEN_MENU, _);
         shortcut.add(
             new ShortcutRow(
                 settings,
                 SHORTCUT_KEYS.OPEN_MENU,
-                _(describe(SHORTCUT_KEYS.OPEN_MENU).label),
-                _(describe(SHORTCUT_KEYS.OPEN_MENU).detail),
+                openMenu.label,
+                openMenu.detail,
             ),
         );
         page.add(shortcut);

@@ -5,7 +5,7 @@ import {
     TransportError,
     commandFor,
     isActionable,
-    messageFor,
+    problemMessage,
     reasonForIoError,
     reasonOf,
 } from '../modules/errors.js';
@@ -66,24 +66,40 @@ describe('reasonOf', () => {
     });
 });
 
-describe('messageFor', () => {
-    it('gives every reason a sentence', () => {
-        for (const reason of Object.values(REASON))
-            expect(messageFor(reason)).toMatch(/\S/);
+// Every branch, through a literal _() call per case. Here rather than in
+// modules/menu-items.js so prefs.js, which cannot import the Shell's modules,
+// words a failure the same way the menu does.
+describe('problemMessage', () => {
+    const untranslated = message => message;
+
+    it.each(Object.values(REASON))('says something for %s', reason => {
+        expect(problemMessage(reason, untranslated)).toMatch(/\S/);
     });
 
     // The whole point of classifying at all. tailscaled answers 403 to anyone
     // who is not the operator, and the extension QuickTS replaces logged that
     // to the journal and drew an empty menu — leaving no way to find out that
     // one command fixes it.
-    it('names the command that fixes a permission failure', () => {
-        expect(messageFor(REASON.PERMISSION_DENIED)).toContain(
-            'tailscale set --operator=',
+    it('names the fix-it command for a permission failure', () => {
+        expect(problemMessage(REASON.PERMISSION_DENIED, untranslated)).toContain(
+            commandFor(REASON.PERMISSION_DENIED),
         );
     });
 
-    it('falls back rather than returning nothing for an unknown reason', () => {
-        expect(messageFor('something-new')).toBe(messageFor(REASON.UNKNOWN));
+    it('falls back to the same text as an unrecognized reason', () => {
+        expect(problemMessage('something-new', untranslated)).toBe(
+            problemMessage(REASON.UNKNOWN, untranslated),
+        );
+    });
+
+    it('asks gettext to translate a literal, not the composed sentence', () => {
+        const asked = [];
+        problemMessage(
+            REASON.PERMISSION_DENIED,
+            message => (asked.push(message), message),
+        );
+
+        expect(asked).toEqual(['Not permitted. Run: %s']);
     });
 });
 

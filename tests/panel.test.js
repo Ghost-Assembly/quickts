@@ -333,8 +333,8 @@ describe('problems and warnings', () => {
         expect(toggleOf()._problems.items.map(item => item.text)).toContain('Log in…');
     });
 
-    // The problem row and the subtitle both word an unreachable daemon from
-    // modules/errors.js's already-composed English (messageFor), and passing
+    // The problem row and the subtitle both used to word an unreachable
+    // daemon from modules/errors.js's already-composed English, and passing
     // that straight to _() asks gettext to translate a sentence it can never
     // see when the .pot file is built — only a literal string reaches
     // xgettext. Every message this scenario hands to gettext must be one.

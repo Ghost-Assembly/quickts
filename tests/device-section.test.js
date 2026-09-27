@@ -288,7 +288,7 @@ describe('devices', () => {
         });
 
         // modules/model.js's ping() used to hand this row modules/errors.js's
-        // already-composed English (messageFor(reasonOf(error))), and
+        // already-composed English, and
         // _(result.error) then asked gettext to translate a sentence it can
         // never see when the .pot file is built — only a literal string
         // reaches xgettext. REASON.PERMISSION_DENIED is the one reason whose

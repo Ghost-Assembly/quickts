@@ -117,38 +117,6 @@ export function reasonForIoError(
 const OPERATOR_COMMAND = 'sudo tailscale set --operator=$USER';
 
 /**
- * What to tell the user, untranslated.
- *
- * Untranslated because this file may not import gettext — the same rule that
- * keeps it importable from Vitest. modules/panel.js runs the result through _().
- *
- * PERMISSION_DENIED is the one that earns its place. The daemon returns 403 to
- * a user who is not the tailscale operator, and an empty, apparently
- * disconnected menu would leave no way to discover that one command fixes it.
- *
- * @param {string} reason One of {@link REASON}.
- * @returns {string} A sentence for the menu.
- */
-export function messageFor(reason) {
-    switch (reason) {
-        case REASON.SOCKET_MISSING:
-            return 'Tailscale is not installed, or has never been started.';
-        case REASON.CONNECTION_REFUSED:
-            return 'The Tailscale daemon is not running.';
-        case REASON.PERMISSION_DENIED:
-            return `Not permitted. Run: ${OPERATOR_COMMAND}`;
-        case REASON.HTTP:
-            return 'The Tailscale daemon refused the request.';
-        case REASON.PROTOCOL:
-            return 'The Tailscale daemon sent an unexpected response.';
-        case REASON.LOCAL_FILE:
-            return 'Could not save the file.';
-        default:
-            return 'Could not reach the Tailscale daemon.';
-    }
-}
-
-/**
  * Whether the reason is something the user can act on.
  *
  * Drives whether the menu offers the message as a prominent row or keeps it as
@@ -166,7 +134,7 @@ export function isActionable(reason) {
  * The shell command that fixes the reason, if one does.
  *
  * The command is data, so it is returned as data. It used to be recovered in
- * modules/panel.js by running a regular expression over the prose above —
+ * modules/panel.js by running a regular expression over the message prose —
  * which meant a reason whose message names no command (SOCKET_MISSING is
  * actionable and names none) copied a whole English sentence to the clipboard,
  * and rewording a message here broke the clipboard silently.
@@ -176,4 +144,42 @@ export function isActionable(reason) {
  */
 export function commandFor(reason) {
     return reason === REASON.PERMISSION_DENIED ? OPERATOR_COMMAND : '';
+}
+
+/**
+ * The sentence for a failure, translated.
+ *
+ * The wording is chosen here, a whole literal sentence per case inside its own
+ * `_()`, where xgettext can see every one of them. Handing gettext a sentence
+ * composed at run time asks it for a msgid no translator was ever given.
+ *
+ * gettext is passed in rather than imported, which keeps this file importable
+ * on plain Node and from prefs.js, which cannot reach the Shell's modules — so
+ * the preferences window words a failure exactly as the menu does.
+ *
+ * PERMISSION_DENIED is the one that earns its place. The daemon returns 403 to
+ * a user who is not the tailscale operator, and an empty, apparently
+ * disconnected menu would leave no way to discover that one command fixes it.
+ *
+ * @param {string} reason One of {@link REASON}.
+ * @param {Function} _ gettext.
+ * @returns {string} A sentence for the menu.
+ */
+export function problemMessage(reason, _) {
+    switch (reason) {
+        case REASON.SOCKET_MISSING:
+            return _('Tailscale is not installed, or has never been started.');
+        case REASON.CONNECTION_REFUSED:
+            return _('The Tailscale daemon is not running.');
+        case REASON.PERMISSION_DENIED:
+            return _('Not permitted. Run: %s').replace('%s', commandFor(reason));
+        case REASON.HTTP:
+            return _('The Tailscale daemon refused the request.');
+        case REASON.PROTOCOL:
+            return _('The Tailscale daemon sent an unexpected response.');
+        case REASON.LOCAL_FILE:
+            return _('Could not save the file.');
+        default:
+            return _('Could not reach the Tailscale daemon.');
+    }
 }

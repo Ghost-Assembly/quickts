@@ -1069,8 +1069,7 @@ describe('waiting files', () => {
 
         const result = await model.saveFile('a.txt');
 
-        // Same: the REASON the daemon failure carried, not messageFor's
-        // composed English.
+        // Same: the REASON the daemon failure carried, not composed English.
         expect(result.error).toBe(REASON.HTTP);
         expect(daemon.deleted).toEqual([]);
     });

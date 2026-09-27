@@ -208,7 +208,7 @@ describe('problemOf', () => {
         );
 
         expect(problem.actionable).toBe(true);
-        expect(problem.message).toContain('tailscale set --operator=');
+        expect(problem.command).toContain('tailscale set --operator=');
     });
 
     it('does not make noise of an unreachable daemon', () => {
@@ -218,14 +218,9 @@ describe('problemOf', () => {
         ).toBe(false);
     });
 
-    it('still says something with no reason recorded', () => {
-        expect(problemOf(up({ reachable: false, errorReason: '' })).message).toMatch(
-            /\S/,
-        );
-    });
-
-    // modules/menu-items.js's problemMessage switches on this, not on
-    // `message`, to translate the problem row and subtitle.
+    // modules/errors.js's problemMessage switches on this to translate the
+    // problem row and subtitle, and falls back to its own wording for
+    // UNKNOWN, so a problem with no reason recorded still says something.
     it('carries the untranslated reason for a caller to translate itself', () => {
         expect(
             problemOf(up({ reachable: false, errorReason: REASON.PERMISSION_DENIED }))

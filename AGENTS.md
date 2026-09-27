@@ -81,11 +81,12 @@ Run `just ci` before claiming anything done.
   already there, including a symlink — so nothing planted in the download
   directory is ever followed or overwritten.
 - **Every translatable string is a literal.** `tests/i18n.test.js`
-  (`tests/support/i18n.js`'s `nonLiteralGettextCalls`) fails if any `_()`
-  call's message, or either of `_n()`'s two arguments, is a variable,
-  property access or template rather than a string literal — invisible to
-  `xgettext -k_ -k_n:1,2` exactly the same way a translator would never
-  see it.
+  (`tests/support/i18n.js`'s `nonLiteralGettextCalls`) reads the source of
+  every file under `modules/`, `prefs.js` and `extension.js`, and fails if
+  any `_()` call's message, or either of `_n()`'s two arguments, is a
+  variable, property access or template rather than a string literal —
+  invisible to `xgettext -k_ -k_n:1,2` exactly the same way a translator
+  would never see it.
 - **No JavaScript on the docs pages.** `docs/index.html` ships no
   `<script>`; `just test-docs` fails the build if one appears.
 - **The shared template files are byte-locked.** Everything in
@@ -98,11 +99,12 @@ Run `just ci` before claiming anything done.
 
 Write the failing test first (RED → GREEN). Layers:
 
-- **Vitest** (`just test`) — every module under `modules/`, `extension.js`
-  and `prefs.js` run exactly as shipped. `prefs.js` (Adw/Gtk widget
-  construction) and `modules/io.js` (Soup/Gio plumbing, checked instead
-  against the real daemon) are excluded from coverage — identically in
-  `vitest.config.js` and `sonar-project.properties`. Stubs for `gi://` and
+- **Vitest** (`just test`) — every module under `modules/` and
+  `extension.js`, run exactly as shipped; `prefs.js` is excluded and
+  imported by no test. `prefs.js` (Adw/Gtk widget construction) and
+  `modules/io.js` (Soup/Gio plumbing, checked instead against the real
+  daemon) are excluded from coverage — identically in `vitest.config.js`
+  and `sonar-project.properties`. Stubs for `gi://` and
   `resource:///` imports live in `tests/stubs/`; a fake daemon and a small
   fake Shell world are in `tests/support/`.
 - **`just localapi-check`** (`scripts/localapi-check.js`, under plain
@@ -181,10 +183,10 @@ and `tests/support/world.js` (`tests/support/actors.js` is template-locked).
 ## Settings keys
 
 `modules/settings.js` is the single source of truth: `KEYS` (the schema
-key names), `SHORTCUT_KEYS` (the one accelerator key), and `SETTINGS` (each
-key's gschema type plus the untranslated label and detail text `prefs.js`
-builds every row from). It imports nothing, so `tests/settings.test.js`
-checks it on plain Node against the gschema.
+key names), `SHORTCUT_KEYS` (the one accelerator key), `SETTINGS` (each
+key's gschema type), and `settingText` (the label and detail `prefs.js`
+builds every row from, each a literal `_()` call). It imports nothing, so
+`tests/settings.test.js` checks it on plain Node against the gschema.
 
 Adding, renaming or removing a setting means updating all three together,
 in this order, or the cross-check test fails:
@@ -192,11 +194,11 @@ in this order, or the cross-check test fails:
 1. `schemas/org.gnome.shell.extensions.quickts.gschema.xml` — the type,
    default, summary and description (and `<range>` for `max-menu-height`,
    currently 0–2000).
-2. `modules/settings.js` — the key constant, its `SETTINGS` entry, and any
-   place in `modules/panel.js` or `prefs.js` that reads it through `KEYS`
-   or `SHORTCUT_KEYS`.
+2. `modules/settings.js` — the key constant, its `SETTINGS` entry, its
+   `settingText` case, and any place in `modules/panel.js` or `prefs.js`
+   that reads it through `KEYS` or `SHORTCUT_KEYS`.
 3. `prefs.js` — only if the widget it needs is not already covered by
-   `describe()`'s label/detail lookup (`Adw.SpinRow` needs its own
+   `settingText`'s label/detail lookup (`Adw.SpinRow` needs its own
    `Gtk.Adjustment` bounds, kept equal to the gschema's `<range>`).
 
 `AdvertiseRoutes` (the advertised-subnets row in preferences) is
