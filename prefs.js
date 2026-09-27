@@ -128,10 +128,14 @@ const ShortcutRow = GObject.registerClass(
             const controller = new Gtk.EventControllerKey();
             controller.connect('key-pressed', (_controller, keyval, keycode, state) => {
                 const mask = state & Gtk.accelerator_get_default_mod_mask();
+                const codePoint = Gdk.keyval_to_unicode(keyval);
 
                 // The decision lives in modules/shortcuts.js and is tested
                 // there; this only carries it out on the widgets.
-                const outcome = captureOutcome(keyval, mask, GTK_BINDING);
+                const outcome = captureOutcome(keyval, mask, {
+                    ...GTK_BINDING,
+                    codePoint,
+                });
 
                 if (outcome === CAPTURE_CANCEL) {
                     dialog.close();

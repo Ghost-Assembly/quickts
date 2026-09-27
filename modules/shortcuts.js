@@ -24,18 +24,40 @@ export const CAPTURE_IGNORE = 'ignore';
 export const CAPTURE_ASSIGN = 'assign';
 
 /**
+ * Whether a key's own code point types something visible.
+ *
+ * Control characters (Tab, Return, Delete, and the function keys, which carry
+ * no code point at all) type nothing, which is what makes Shift+F5 bindable
+ * where Shift+A is not: Shift+A is how a capital A is typed.
+ *
+ * @param {number} codePoint The character the key types on its own, as
+ *   Gdk.keyval_to_unicode gives it; 0 or negative for none.
+ * @returns {boolean} True if the key types a visible character.
+ */
+function typesVisibly(codePoint) {
+    return codePoint > 0 && !/\p{Cc}/u.test(String.fromCodePoint(codePoint));
+}
+
+/**
  * Whether a captured combination may be bound as a global shortcut.
  *
- * A bare key would steal it from every application, and Shift alone just types
- * a capital letter.
+ * A bare key would steal it from every application. Shift alone is bindable
+ * only when the key types nothing on its own — GNOME Settings' own rule.
  *
  * @param {number} mask Modifier mask, already reduced to the default mod mask.
  * @param {number} keyval Key value.
- * @param {{shiftMask: number, acceleratorValid: Function}} gtk Gdk/Gtk values.
+ * @param {{shiftMask: number, acceleratorValid: Function, codePoint: number}} gtk
+ *   Gdk/Gtk values. codePoint is the character the key types on its own, as
+ *   Gdk.keyval_to_unicode gives it.
  * @returns {boolean} True if the combination may be bound.
  */
-export function isValidBinding(mask, keyval, { shiftMask, acceleratorValid }) {
-    if (mask === 0 || mask === shiftMask) return false;
+export function isValidBinding(
+    mask,
+    keyval,
+    { shiftMask, acceleratorValid, codePoint },
+) {
+    if (mask === 0) return false;
+    if (mask === shiftMask && typesVisibly(codePoint)) return false;
 
     return acceleratorValid(keyval, mask);
 }
@@ -49,7 +71,7 @@ export function isValidBinding(mask, keyval, { shiftMask, acceleratorValid }) {
  * @param {number} keyval Key value.
  * @param {number} mask Modifier mask, reduced to the default mod mask.
  * @param {object} gtk Gdk/Gtk values: escapeKey, backspaceKey, shiftMask,
- *   acceleratorValid.
+ *   acceleratorValid, and the key's codePoint.
  * @returns {string} One of the CAPTURE_* outcomes.
  */
 export function captureOutcome(keyval, mask, gtk) {
