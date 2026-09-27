@@ -95,6 +95,17 @@ export class TailscaleModel {
     #peersReadAt = 0;
     #menuOpen = false;
 
+    /** Each waiting file's size as last listed, by name. */
+    #listedSizes = new Map();
+
+    /**
+     * Files saved here that tailscaled then would not delete, by name, with
+     * the size they were listed at. Hidden from waitingFiles, which asks the
+     * daemon to delete them again, so a saved file is never offered to save a
+     * second time.
+     */
+    #savedNotDeleted = new Map();
+
     /**
      * @param {object} options Options.
      * @param {object} options.client Transport, from modules/io.js.
@@ -306,12 +317,47 @@ export class TailscaleModel {
     async waitingFiles() {
         if (this.#disposed || !isUp(this.#state)) return [];
 
+        let files;
         try {
-            return waitingFiles(await this.#request(waitingFilesRequest()));
+            files = waitingFiles(await this.#request(waitingFilesRequest()));
         } catch (error) {
             if (!isCanceled(error))
                 console.debug(`[quickts] could not list waiting files: ${error}`);
             return [];
+        }
+
+        this.#listedSizes = new Map(files.map(({ name, size }) => [name, size]));
+        await this.#retryDeletes();
+
+        return files.filter(({ name }) => !this.#savedNotDeleted.has(name));
+    }
+
+    /**
+     * Ask tailscaled again to delete each file already saved here that is
+     * still listed.
+     *
+     * One no longer listed at the size it was saved at is dropped first: it
+     * is gone, and a file listed under that name now is a different one, not
+     * yet saved, that must be neither hidden nor deleted.
+     *
+     * @returns {Promise<void>} Done; a refusal leaves the file for next time.
+     */
+    async #retryDeletes() {
+        for (const [name, size] of this.#savedNotDeleted) {
+            if (this.#listedSizes.get(name) !== size) {
+                this.#savedNotDeleted.delete(name);
+                continue;
+            }
+
+            try {
+                await this.#request(deleteFileRequest(name));
+                this.#savedNotDeleted.delete(name);
+            } catch (error) {
+                if (!isCanceled(error))
+                    console.debug(
+                        `[quickts] could not remove a saved file from Taildrop: ${reasonOf(error)}`,
+                    );
+            }
         }
     }
 
@@ -319,6 +365,11 @@ export class TailscaleModel {
      * Save one waiting file, then let the daemon forget it.
      *
      * In that order. Deleting first loses the file if the write fails.
+     *
+     * Once the file is written, a delete that fails does not undo that: the
+     * path is still returned, with no error, because the file is saved. The
+     * file stays in tailscaled's inbox, and waitingFiles hides it and asks
+     * again, so it is not offered, and saved as a duplicate, a second time.
      *
      * @param {string} name The name as the daemon lists it.
      * @returns {Promise<{path: string, error: string}>} Where it went, or a
@@ -333,16 +384,26 @@ export class TailscaleModel {
         // left on the daemon, where `tailscale file get` can still reach it.
         if (!isSafeFileName(name)) return { path: '', error: REASON.PROTOCOL };
 
+        let path;
         try {
-            const path = await this.#client.saveFile(getFileRequest(name), name);
-            await this.#request(deleteFileRequest(name));
-
-            return { path, error: '' };
+            path = await this.#client.saveFile(getFileRequest(name), name);
         } catch (error) {
             if (isCanceled(error)) return { path: '', error: '' };
 
             return { path: '', error: reasonOf(error) };
         }
+
+        try {
+            await this.#request(deleteFileRequest(name));
+        } catch (error) {
+            this.#savedNotDeleted.set(name, this.#listedSizes.get(name));
+            if (!isCanceled(error))
+                console.debug(
+                    `[quickts] saved a file but could not remove it from Taildrop: ${reasonOf(error)}`,
+                );
+        }
+
+        return { path, error: '' };
     }
 
     /**

@@ -1793,7 +1793,10 @@
                                 </td>
                                 <td data-label="Used for" class="muted">
                                     Receiving, streamed to disk. The file is written
-                                    before the daemon is told to forget it.
+                                    before the daemon is told to forget it; if the
+                                    daemon will not, the file still counts as saved, is
+                                    not offered again, and the delete is retried the
+                                    next time the menu opens.
                                 </td>
                             </tr>
                             <tr>

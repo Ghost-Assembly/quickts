@@ -1082,6 +1082,88 @@ describe('waiting files', () => {
         expect(daemon.deleted.at(-1)).toContain('a.txt');
     });
 
+    // The file is already written by then. Reporting the failure as an error
+    // threw that path away, and saving again made a duplicate "a (1).txt".
+    it('keeps the saved path when the daemon will not forget the file', async () => {
+        const { model, daemon } = setup();
+        daemon.responses.files = [{ Name: 'a.txt', Size: 4 }];
+        await model.start();
+        daemon.failures.set(
+            'DELETE /localapi/v0/files/a.txt',
+            new TransportError(REASON.HTTP, '500'),
+        );
+
+        const result = await model.saveFile('a.txt');
+
+        expect(result).toEqual({ path: '/home/someone/Downloads/a.txt', error: '' });
+        expect(daemon.saved).toHaveLength(1);
+    });
+
+    describe('a file saved that the daemon would not forget', () => {
+        const savedButKept = async () => {
+            const { model, daemon } = setup();
+            daemon.responses.files = [{ Name: 'a.txt', Size: 4 }];
+            await model.start();
+            await model.waitingFiles();
+            daemon.failures.set(
+                'DELETE /localapi/v0/files/a.txt',
+                new TransportError(REASON.HTTP, '500'),
+            );
+            await model.saveFile('a.txt');
+            daemon.reset();
+
+            return { model, daemon };
+        };
+
+        // Listed, it would be offered to save again, and a second save is a
+        // duplicate.
+        it('is not listed as waiting again', async () => {
+            const { model, daemon } = await savedButKept();
+
+            expect(await model.waitingFiles()).toEqual([]);
+            expect(daemon.saved).toHaveLength(1);
+        });
+
+        it('is not saved a second time', async () => {
+            const { model, daemon } = await savedButKept();
+            daemon.failures.clear();
+
+            await model.waitingFiles();
+            await model.waitingFiles();
+
+            expect(daemon.saved).toHaveLength(1);
+        });
+
+        it('is forgotten on the next listing once the daemon allows it', async () => {
+            const { model, daemon } = await savedButKept();
+            daemon.failures.clear();
+
+            await model.waitingFiles();
+
+            expect(daemon.deleted).toEqual(['/localapi/v0/files/a.txt']);
+        });
+
+        it('stays hidden while the daemon still refuses', async () => {
+            const { model, daemon } = await savedButKept();
+
+            expect(await model.waitingFiles()).toEqual([]);
+            expect(await model.waitingFiles()).toEqual([]);
+            expect(daemon.deleted).toEqual([]);
+        });
+
+        // A different file under the same name, sent after the first one was
+        // removed some other way: it has not been saved, so it is listed and
+        // never deleted unsaved.
+        it('does not hide a new file that arrives under the same name', async () => {
+            const { model, daemon } = await savedButKept();
+            daemon.failures.clear();
+            daemon.responses.files = [{ Name: 'a.txt', Size: 99 }];
+
+            expect(await model.waitingFiles()).toEqual([{ name: 'a.txt', size: 99 }]);
+            expect(daemon.deleted).toEqual([]);
+        });
+    });
+
     // tailscaled validates names on the way in; this is where one becomes a
     // path here, so it is checked again rather than trusted.
     it.each(['../escape.txt', '.bashrc', 'sub/dir.txt'])(

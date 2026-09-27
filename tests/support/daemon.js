@@ -87,7 +87,11 @@ export function createDaemon(seed = {}) {
     const paths = [];
     /** Bodies of every PATCH, in order. */
     const patches = [];
-    /** Paths the daemon should reject, mapped to the error to throw. */
+    /**
+     * Paths the daemon should reject, mapped to the error to throw. A key may
+     * also start with a method, as in 'DELETE /localapi/v0/files/a.txt', to
+     * reject only that method's requests.
+     */
     const failures = new Map();
     /** Files the daemon was told to forget, in order. */
     const deleted = [];
@@ -101,8 +105,9 @@ export function createDaemon(seed = {}) {
             paths.push(path);
             if (method === 'PATCH') patches.push(body);
 
-            const failure = [...failures.entries()].find(([prefix]) =>
-                path.startsWith(prefix),
+            const failure = [...failures.entries()].find(
+                ([prefix]) =>
+                    path.startsWith(prefix) || `${method} ${path}`.startsWith(prefix),
             );
             if (failure) throw failure[1];
 
