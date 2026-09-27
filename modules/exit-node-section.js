@@ -10,6 +10,7 @@ import { cityOf, groupByCountry, partitionMullvad } from './mullvad.js';
 import { KEYS } from './settings.js';
 import { ActionMenuItem, addRow } from './menu-items.js';
 import { NavigableSection } from './navigable-section.js';
+import { fill } from './text.js';
 
 /** The exit node submenu. */
 export class ExitNodeSection {
@@ -108,7 +109,7 @@ export class ExitNodeSection {
         if (this._suggestion && !state.exitNodeId) {
             addRow(
                 menu,
-                _('Suggested: %s').replace('%s', this._suggestion.name),
+                fill(_('Suggested: %s'), this._suggestion.name),
                 'starred-symbolic',
                 () => void this._model.setExitNode(this._suggestion.id),
                 this,
@@ -223,7 +224,7 @@ export class ExitNodeSection {
  * @returns {string} A label.
  */
 function exitNodeLabel(state, { _ }) {
-    if (state.exitNodeName) return _('Exit node: %s').replace('%s', state.exitNodeName);
+    if (state.exitNodeName) return fill(_('Exit node: %s'), state.exitNodeName);
 
     return state.exitNodeId ? _('Exit node: automatic') : _('Exit node');
 }

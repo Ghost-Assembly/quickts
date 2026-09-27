@@ -17,6 +17,7 @@ import {
     problemMessage,
 } from './menu-items.js';
 import { NavigableSection } from './navigable-section.js';
+import { fill } from './text.js';
 
 /** The device submenu. */
 export class DeviceSection {
@@ -222,12 +223,10 @@ export class DeviceSection {
 function formatPing(result, { _ }) {
     const latency = String(result.latencyMs);
 
-    if (result.route === ROUTE.DIRECT) return _('%s ms, direct').replace('%s', latency);
+    if (result.route === ROUTE.DIRECT) return fill(_('%s ms, direct'), latency);
     if (result.route === ROUTE.RELAY && result.relay)
-        return _('%s ms, relayed via %s')
-            .replace('%s', latency)
-            .replace('%s', result.relay);
-    if (result.route === ROUTE.RELAY) return _('%s ms, relayed').replace('%s', latency);
+        return fill(_('%s ms, relayed via %s'), latency, result.relay);
+    if (result.route === ROUTE.RELAY) return fill(_('%s ms, relayed'), latency);
 
-    return _('%s ms').replace('%s', latency);
+    return fill(_('%s ms'), latency);
 }

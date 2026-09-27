@@ -1,13 +1,16 @@
 // What went wrong talking to tailscaled, as a value rather than a string.
 //
-// This file imports nothing. modules/io.js is the only place with Gio and
-// Soup in scope, so it reads the code off a GError, or the status off an
-// answer, and hands it here, with Gio.IOErrorEnum passed in rather than
-// imported; the reason is decided here and io.js throws it. Everything
-// downstream — the reducer, the menu, the tests — reasons about the symbol.
+// This file imports nothing but modules/text.js, which imports nothing
+// either. modules/io.js is the only place with Gio and Soup in scope, so it
+// reads the code off a GError, or the status off an answer, and hands it
+// here, with Gio.IOErrorEnum passed in rather than imported; the reason is
+// decided here and io.js throws it. Everything downstream — the reducer, the
+// menu, the tests — reasons about the symbol.
 //
 // The division is deliberate: io.js knows Gio and Soup, this file knows what
 // they mean.
+
+import { fill } from './text.js';
 
 /**
  * Why a request failed.
@@ -195,7 +198,7 @@ export function problemMessage(reason, _) {
         case REASON.CONNECTION_REFUSED:
             return _('The Tailscale daemon is not running.');
         case REASON.PERMISSION_DENIED:
-            return _('Not permitted. Run: %s').replace('%s', commandFor(reason));
+            return fill(_('Not permitted. Run: %s'), commandFor(reason));
         case REASON.HTTP:
             return _('The Tailscale daemon refused the request.');
         case REASON.PROTOCOL:

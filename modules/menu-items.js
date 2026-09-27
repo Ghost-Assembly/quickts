@@ -12,6 +12,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import { fill } from './text.js';
 import { describeWarning } from './warnings.js';
 
 // The sentence for a daemon problem lives in modules/errors.js, where prefs.js
@@ -109,7 +110,7 @@ export function copyText(text, gicon, { _ }) {
     clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
     clipboard.set_text(St.ClipboardType.PRIMARY, text);
 
-    showOsd(gicon, _('Copied %s').replace('%s', text));
+    showOsd(gicon, fill(_('Copied %s'), text));
 }
 
 /**

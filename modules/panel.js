@@ -48,6 +48,7 @@ import {
 import { ExitNodeSection } from './exit-node-section.js';
 import { DeviceSection } from './device-section.js';
 import { InboxSection, SendSection } from './taildrop-section.js';
+import { fill } from './text.js';
 
 /** The tile's own icon, next to the clock. */
 const QuickTSIndicator = GObject.registerClass(
@@ -371,9 +372,9 @@ const QuickTSToggle = GObject.registerClass(
             this._warnings.visible = total > 0;
             if (total === 0) return;
 
-            this._warnings.label.text = _n('%d warning', '%d warnings', total).replace(
-                '%d',
-                String(total),
+            this._warnings.label.text = fill(
+                _n('%d warning', '%d warnings', total),
+                total,
             );
 
             for (const line of lines) this._warnings.menu.addMenuItem(warningRow(line));
@@ -384,7 +385,7 @@ const QuickTSToggle = GObject.registerClass(
             if (hidden > 0)
                 addDisabledRow(
                     this._warnings.menu,
-                    _n('%d more', '%d more', hidden).replace('%d', String(hidden)),
+                    fill(_n('%d more', '%d more', hidden), hidden),
                 );
         }
 
@@ -750,11 +751,9 @@ function subtitleFor(state, { _, _n }) {
             return _('Off');
         case SUMMARY.EXIT_NODE:
             // An automatic exit node has an id but no name to show.
-            return value
-                ? _('via %s').replace('%s', String(value))
-                : _('via an exit node');
+            return value ? fill(_('via %s'), value) : _('via an exit node');
         case SUMMARY.WARNINGS:
-            return _n('%d warning', '%d warnings', value).replace('%d', String(value));
+            return fill(_n('%d warning', '%d warnings', value), value);
         default:
             return String(value ?? '');
     }

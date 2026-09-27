@@ -83,6 +83,25 @@ describe('received files', () => {
         expect(Main.osdMessages).toHaveLength(1);
     });
 
+    // The sender chose the name. As a replacement string, its $' would pull in
+    // the rest of the sentence around it.
+    it('reports a saved file by the name it was sent with', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.files = [{ Name: "draft$'s.txt", Size: 12 }];
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(row.text).toBe("Saved to /home/someone/Downloads/draft$'s.txt");
+        expect(Main.osdMessages.at(-1).label).toBe("Saved draft$'s.txt");
+    });
+
     // In that order: deleting first loses the file if the write fails.
     it('forgets the file only after saving it', async () => {
         const { panel, model, daemon } = setup();

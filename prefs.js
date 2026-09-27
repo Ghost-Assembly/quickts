@@ -30,6 +30,7 @@ import {
     CAPTURE_CLEAR,
     captureOutcome,
 } from './modules/shortcuts.js';
+import { fill } from './modules/text.js';
 
 // The Gdk and Gtk values modules/shortcuts.js needs. Passed in rather than
 // imported there, so the rules themselves stay testable on plain Node.
@@ -219,7 +220,7 @@ const RoutesRow = GObject.registerClass(
                 // Reported rather than dropped: silently discarding a typo
                 // would leave someone believing a subnet is advertised.
                 this.add_css_class('error');
-                this._say(_('Not a subnet: %s').replace('%s', invalid.join(', ')));
+                this._say(fill(_('Not a subnet: %s'), invalid.join(', ')));
                 return;
             }
 
