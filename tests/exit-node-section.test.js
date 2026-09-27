@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { REASON } from '../modules/errors.js';
 import { KEYS } from '../modules/settings.js';
 import { rawPeer, rawPeerMap, SUFFIX } from './fixtures/peers.js';
 import * as Main from './stubs/shell-main.js';
@@ -99,6 +100,68 @@ describe('the exit node picker', () => {
         await settle();
 
         expect(daemon.patches.at(-1)).toMatchObject({ ExitNodeID: '' });
+    });
+
+    // The row is ticked from the daemon's answer, not from the click, so a
+    // refused choice leaves the node actually in use ticked — and the menu
+    // says why rather than calling the daemon unreachable.
+    describe('a refused choice', () => {
+        const refuse = daemon =>
+            daemon.failures.set('/localapi/v0/prefs', {
+                name: 'TransportError',
+                reason: REASON.HTTP,
+            });
+        const rows = () => toggleOf()._exitNode.menu.items;
+        const choose = name =>
+            rows()
+                .find(item => item.text === name)
+                .activate();
+
+        it('keeps the node in use ticked, and says why', async () => {
+            const { panel, model, daemon } = setup({ seed: withGateway() });
+            panel.enable();
+            await model.start();
+            await settle();
+            refuse(daemon);
+
+            choose('gateway');
+            await settle();
+
+            expect(daemon.patches.at(-1)).toMatchObject({ ExitNodeID: 'nGATE' });
+            expect(rows().find(item => item.text === 'None').icon).toBe(
+                'object-select-symbolic',
+            );
+            expect(rows().find(item => item.text === 'gateway').icon).not.toBe(
+                'object-select-symbolic',
+            );
+            expect(toggleOf()._exitNode.label.text).toBe('Exit node');
+            expect(model.state.reachable).toBe(true);
+            expect(labelsOf(toggleOf()._problems.items)).toEqual([
+                'The Tailscale daemon refused the request.',
+            ]);
+        });
+
+        it('still does after a second identical refusal', async () => {
+            const { panel, model, daemon } = setup({ seed: withGateway() });
+            daemon.responses.prefs.ExitNodeID = 'nGATE';
+            panel.enable();
+            await model.start();
+            await settle();
+            refuse(daemon);
+
+            choose('gateway');
+            await settle();
+            choose('None');
+            await settle();
+
+            expect(daemon.patches).toHaveLength(2);
+            expect(rows().find(item => item.text === 'gateway').icon).toBe(
+                'object-select-symbolic',
+            );
+            expect(toggleOf()._exitNode.label.text).toBe('Exit node: gateway');
+            expect(toggleOf().subtitle).toBe('via gateway');
+            expect(model.state.reachable).toBe(true);
+        });
     });
 
     describe('Mullvad', () => {

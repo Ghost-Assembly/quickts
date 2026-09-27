@@ -262,6 +262,8 @@ describe('commands', () => {
         expect(model.state.errorReason).toBe(REASON.HTTP);
     });
 
+    // A 403 is the missing operator, and the operator row is how anyone
+    // finds out, so it still marks the daemon unreachable.
     it('reports a failed command instead of throwing', async () => {
         const { model, daemon } = setup();
         await model.start();
@@ -270,8 +272,83 @@ describe('commands', () => {
             new TransportError(REASON.PERMISSION_DENIED, '403'),
         );
 
-        await expect(model.setRunning(false)).resolves.toBeUndefined();
+        await expect(model.setRunning(false)).resolves.toEqual({
+            error: REASON.PERMISSION_DENIED,
+        });
+        expect(model.state.reachable).toBe(false);
         expect(model.state.errorReason).toBe(REASON.PERMISSION_DENIED);
+    });
+
+    it('reports an applied command with no error', async () => {
+        const { model } = setup();
+        await model.start();
+
+        await expect(model.setShieldsUp(true)).resolves.toEqual({ error: '' });
+    });
+
+    // The daemon answered and said no. One refused change is not evidence
+    // that the daemon has gone, and saying so would put "the daemon refused
+    // the request" in place of a menu that is otherwise working.
+    it.each([REASON.HTTP, REASON.PROTOCOL])(
+        'keeps the daemon reachable when a change is refused with %s',
+        async reason => {
+            const { model, daemon } = setup();
+            await model.start();
+            daemon.failures.set('/localapi/v0/prefs', new TransportError(reason, 'no'));
+
+            await expect(model.setShieldsUp(true)).resolves.toEqual({ error: reason });
+            expect(model.state.reachable).toBe(true);
+            expect(model.state.errorReason).toBe('');
+            expect(model.state.refusedReason).toBe(reason);
+            expect(model.state.shieldsUp).toBe(false);
+        },
+    );
+
+    // What sets a flipped switch back is a change the menu hears about. The
+    // second refusal, identical to the first, has to be one too.
+    it('tells subscribers about every refusal, not just the first', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set(
+            '/localapi/v0/prefs',
+            new TransportError(REASON.HTTP, '500'),
+        );
+        const listener = vi.fn();
+        model.subscribe(listener);
+
+        await model.setShieldsUp(true);
+        await model.setShieldsUp(true);
+
+        expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    // A disable in the middle of a change is teardown, not a refusal.
+    it('reports nothing for a change canceled in flight', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set('/localapi/v0/prefs', new CanceledError());
+        const listener = vi.fn();
+        model.subscribe(listener);
+
+        await expect(model.setShieldsUp(true)).resolves.toEqual({ error: '' });
+        expect(listener).not.toHaveBeenCalled();
+        expect(model.state.refusedReason).toBe('');
+    });
+
+    it('clears the refusal once a change goes through', async () => {
+        const { model, daemon } = setup();
+        await model.start();
+        daemon.failures.set(
+            '/localapi/v0/prefs',
+            new TransportError(REASON.HTTP, '500'),
+        );
+        await model.setShieldsUp(true);
+
+        daemon.failures.clear();
+        await model.setShieldsUp(true);
+
+        expect(model.state.refusedReason).toBe('');
+        expect(model.state.shieldsUp).toBe(true);
     });
 
     it('reads status after a login so the auth URL can arrive', async () => {

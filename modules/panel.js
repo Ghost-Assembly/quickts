@@ -227,7 +227,10 @@ const QuickTSToggle = GObject.registerClass(
 
                 // The switch reports what the user asked for; the daemon's
                 // answer comes back through the model and is what finally
-                // sets the state. A refused change therefore reverts.
+                // sets the state. A refused change therefore reverts: the
+                // model counts every refusal, so even a repeat of the last
+                // one is a change, and _syncOptions sets the switch back from
+                // the preferences that still hold.
                 item.connectObject(
                     'toggled',
                     (_item, value) => void apply(value),
@@ -262,7 +265,12 @@ const QuickTSToggle = GObject.registerClass(
 
             this._maybeOpenAuthUrl(state);
 
-            if (moved('reachable') || moved('errorReason') || moved('backendState'))
+            if (
+                moved('reachable') ||
+                moved('errorReason') ||
+                moved('refusedReason') ||
+                moved('backendState')
+            )
                 this._syncProblems(state);
 
             if (moved('health')) this._syncWarnings(state);
@@ -326,6 +334,10 @@ const QuickTSToggle = GObject.registerClass(
                 else item.setSensitive(false);
 
                 this._problems.addMenuItem(item);
+            } else if (state.refusedReason) {
+                // A change the daemon answered and refused. The switch has
+                // already been set back by _syncOptions; this says why.
+                addDisabledRow(this._problems, problemMessage(state.refusedReason, _));
             }
 
             if (needsLogin(state)) {

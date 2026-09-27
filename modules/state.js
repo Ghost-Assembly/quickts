@@ -28,6 +28,12 @@ export function initialState() {
         reachable: false,
         errorReason: '',
 
+        // Why the daemon, reachable, last refused a change, and how many
+        // times it has. The count is what makes a second identical refusal a
+        // change of its own; see applyRefusal().
+        refusedReason: '',
+        refusedCount: 0,
+
         // From /status.
         backendState: BACKEND.NO_STATE,
         authUrl: '',
@@ -147,6 +153,8 @@ export function applyPrefs(state, prefs) {
         ...state,
         reachable: true,
         errorReason: '',
+        // The daemon's current answer; a refusal before it is no longer news.
+        refusedReason: '',
 
         running: prefs?.WantRunning === true,
         acceptRoutes: prefs?.RouteAll === true,
@@ -221,6 +229,28 @@ export function applyError(state, reason) {
 }
 
 /**
+ * Record that the daemon refused a change.
+ *
+ * It answered, so it is still reachable and everything already read still
+ * holds; the change just did not happen. The menu sets a flipped switch back
+ * from the unchanged preferences whenever it is told something moved, so the
+ * count moves on every refusal: a second one with the same reason would
+ * otherwise change nothing, tell nobody, and leave the switch showing what
+ * the daemon refused.
+ *
+ * @param {object} state Current state.
+ * @param {string} reason One of {@link REASON}.
+ * @returns {object} A new state.
+ */
+export function applyRefusal(state, reason) {
+    return derive({
+        ...state,
+        refusedReason: reason || REASON.UNKNOWN,
+        refusedCount: state.refusedCount + 1,
+    });
+}
+
+/**
  * Which fields differ between two snapshots.
  *
  * Subscribers use this to decide whether they have anything to redraw. The
@@ -253,6 +283,8 @@ export function changed(previous, next) {
 const SCALARS = Object.freeze([
     ['reachable', s => s.reachable],
     ['errorReason', s => s.errorReason],
+    ['refusedReason', s => s.refusedReason],
+    ['refusedCount', s => s.refusedCount],
     ['backendState', s => s.backendState],
     ['authUrl', s => s.authUrl],
     ['magicDNSSuffix', s => s.magicDNSSuffix],

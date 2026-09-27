@@ -6,6 +6,7 @@ import {
     applyError,
     applyPrefs,
     applyProfiles,
+    applyRefusal,
     applyStatus,
     changed,
     initialState,
@@ -285,6 +286,61 @@ describe('applyError', () => {
 
     it('falls back to unknown for an empty reason', () => {
         expect(applyError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
+    });
+});
+
+describe('applyRefusal', () => {
+    // The daemon answered, so it is still there and what was read is still
+    // true. Only the change did not happen.
+    it('keeps the daemon reachable and what was already known', () => {
+        const loaded = applyPrefs(applyStatus(initialState(), status()), prefs());
+        const refused = applyRefusal(loaded, REASON.HTTP);
+
+        expect(refused.reachable).toBe(true);
+        expect(refused.errorReason).toBe('');
+        expect(refused.running).toBe(true);
+        expect(refused.nodes).toHaveLength(1);
+    });
+
+    it('records why, and counts it', () => {
+        const refused = applyRefusal(initialState(), REASON.PROTOCOL);
+
+        expect(refused.refusedReason).toBe(REASON.PROTOCOL);
+        expect(refused.refusedCount).toBe(initialState().refusedCount + 1);
+    });
+
+    it('falls back to unknown for an empty reason', () => {
+        expect(applyRefusal(initialState(), '').refusedReason).toBe(REASON.UNKNOWN);
+    });
+
+    it('starts with nothing refused', () => {
+        expect(initialState().refusedReason).toBe('');
+        expect(initialState().refusedCount).toBe(0);
+    });
+
+    it('is frozen', () => {
+        expect(Object.isFrozen(applyRefusal(initialState(), REASON.HTTP))).toBe(true);
+    });
+
+    // A switch the user flipped is set back from the unchanged preferences
+    // only when a change tells the menu to look. Two refusals in a row with
+    // the same reason would otherwise look like nothing happened the second
+    // time, and leave the switch showing what the daemon refused.
+    it('registers a second identical refusal as a change', () => {
+        const once = applyRefusal(applyPrefs(initialState(), prefs()), REASON.HTTP);
+        const twice = applyRefusal(once, REASON.HTTP);
+
+        expect(changed(once, twice)).toEqual(['refusedCount']);
+    });
+
+    // The next successful read or change is the daemon's current answer, and
+    // the refusal it follows is no longer news.
+    it('is cleared by the next preferences read', () => {
+        const refused = applyRefusal(applyPrefs(initialState(), prefs()), REASON.HTTP);
+        const read = applyPrefs(refused, prefs());
+
+        expect(read.refusedReason).toBe('');
+        expect(changed(refused, read)).toEqual(['refusedReason']);
     });
 });
 

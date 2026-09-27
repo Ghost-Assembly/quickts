@@ -441,6 +441,78 @@ describe('the settings switches', () => {
         expect(rowsNamed(toggleOf(), 'Accept routes').at(0)).toBe(before);
         expect(before._wasDestroyed).toBe(false);
     });
+
+    // A switch moves the moment it is flipped, before the daemon has said
+    // anything. A refused change has to set it back, and say why, without
+    // calling a daemon that answered unreachable.
+    it('set themselves back when the daemon refuses the change', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        const subtitle = toggleOf().subtitle;
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        expect(routes.state).toBe(false);
+        expect(model.state.reachable).toBe(true);
+        expect(toggleOf().subtitle).toBe(subtitle);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon refused the request.',
+        ]);
+    });
+
+    // The second refusal leaves every preference exactly as the first did.
+    // Only its being counted tells the menu to look again.
+    it('set themselves back after a second identical refusal', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(2);
+        expect(routes.state).toBe(false);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon refused the request.',
+        ]);
+    });
+
+    it('drop the refusal once a change goes through', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        daemon.failures.clear();
+        routes.toggle();
+        await settle();
+
+        expect(routes.state).toBe(true);
+        expect(toggleOf()._problems.items).toEqual([]);
+    });
 });
 
 describe('running as an exit node', () => {
@@ -495,6 +567,27 @@ describe('running as an exit node', () => {
         await settle();
 
         expect(daemon.patches.at(-1).AdvertiseRoutes).toEqual(['192.168.1.0/24']);
+    });
+
+    it('turns itself back off when the daemon refuses, every time', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const exitNode = rowsNamed(toggleOf(), 'Run as exit node').at(0);
+        exitNode.activate();
+        await settle();
+        expect(exitNode.state).toBe(false);
+
+        exitNode.activate();
+        await settle();
+        expect(exitNode.state).toBe(false);
+        expect(model.state.reachable).toBe(true);
     });
 });
 
