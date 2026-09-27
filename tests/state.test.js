@@ -300,6 +300,22 @@ describe('applyError', () => {
     it('falls back to unknown for an empty reason', () => {
         expect(applyError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
     });
+
+    // Losing contact makes a refusal from before it stale. Kept, the "refused
+    // the request" row came back with the first status read after
+    // reconnecting, for a change nobody had made since.
+    it('drops a refusal from before the daemon was lost', () => {
+        const refused = applyRefusal(
+            applyStatus(initialState(), status()),
+            REASON.HTTP,
+        );
+        const back = applyStatus(
+            applyError(refused, REASON.CONNECTION_REFUSED),
+            status(),
+        );
+
+        expect(back.refusedReason).toBe('');
+    });
 });
 
 describe('applyRefusal', () => {
@@ -378,6 +394,19 @@ describe('applyChangeError', () => {
 
     it('falls back to unknown for an empty reason', () => {
         expect(applyChangeError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
+    });
+
+    it('drops a refusal from before the daemon was lost', () => {
+        const refused = applyRefusal(
+            applyStatus(initialState(), status()),
+            REASON.HTTP,
+        );
+        const back = applyStatus(
+            applyChangeError(refused, REASON.CONNECTION_REFUSED),
+            status(),
+        );
+
+        expect(back.refusedReason).toBe('');
     });
 
     // Already unreachable for the same reason — a stopped daemon, a user who

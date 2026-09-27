@@ -233,6 +233,9 @@ export function applyError(state, reason) {
         ...state,
         reachable: false,
         errorReason: reason || REASON.UNKNOWN,
+        // A refusal from before contact was lost is stale; kept, it would
+        // come back with the first status read after reconnecting.
+        refusedReason: '',
     });
 }
 
@@ -276,6 +279,7 @@ export function applyChangeError(state, reason) {
         ...state,
         reachable: false,
         errorReason: reason || REASON.UNKNOWN,
+        refusedReason: '',
         refusedCount: state.refusedCount + 1,
     });
 }
