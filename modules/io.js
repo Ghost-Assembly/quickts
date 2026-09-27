@@ -273,6 +273,13 @@ export function createIo({ token }) {
             // Either timeout would tear it down on a quiet tailnet.
             timeout: 0,
             'idle-timeout': 0,
+            // libsoup allows two connections per host by default, and the
+            // bus holds one for as long as the extension is enabled. One
+            // more long request — a Taildrop send, a slow ping — then took
+            // the other, and every read queued behind it. There is only one
+            // host, the socket, so both limits are the same number.
+            'max-conns-per-host': 8,
+            'max-conns': 8,
         });
         return session;
     };

@@ -268,6 +268,70 @@ async function checkStreamCancels(io, token) {
     }
 }
 
+/**
+ * Wait for a promise, but no longer than `ms`.
+ *
+ * @param {Promise<unknown>} promise What to wait for.
+ * @param {number} ms Milliseconds to allow.
+ * @returns {Promise<{timedOut?: boolean, error?: unknown}>} How it settled.
+ */
+function settleWithin(promise, ms) {
+    return new Promise(resolve => {
+        let id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            id = 0;
+            resolve({ timedOut: true });
+            return GLib.SOURCE_REMOVE;
+        });
+        // After a timeout the promise may still settle, canceled; the source
+        // is gone by then and must not be removed a second time.
+        const settle = outcome => {
+            if (id) GLib.Source.remove(id);
+            id = 0;
+            resolve(outcome);
+        };
+        promise.then(
+            () => settle({}),
+            error => settle({ error }),
+        );
+    });
+}
+
+// The bus holds its connection for as long as the extension is enabled, and
+// libsoup allows two per host by default. One more long request beside it —
+// a Taildrop send, a ping to a peer that never answers — took the other, and
+// every /status behind it waited until that finished. A second bus stands in
+// for that request here, so the check needs no peer and no file.
+async function checkRequestsBesideLongPolls() {
+    const PARALLEL = 4;
+    const token = new CancelToken();
+    const io = createIo({ token });
+
+    const streams = [
+        io.client.stream(watchBusRequest()),
+        io.client.stream(watchBusRequest()),
+    ];
+    // Each holds its connection once the daemon has answered the first line.
+    for (const stream of streams) await stream.next();
+
+    const requests = Promise.all(
+        Array.from({ length: PARALLEL }, () =>
+            io.client.request(statusRequest({ peers: false })),
+        ),
+    );
+    const { timedOut, error } = await settleWithin(requests, 5000);
+    check(
+        !timedOut && !error,
+        `${PARALLEL} parallel /status requests answer beside two open long polls` +
+            (timedOut ? ' (timed out after 5000ms)' : error ? ` (${error})` : ''),
+    );
+
+    // Cancels whatever is still waiting, then lets each stream close its own
+    // input.
+    token.cancel();
+    for (const stream of streams) await stream.return();
+    io.dispose();
+}
+
 // The regression this whole design exists for. Removing the GLib source from
 // disable() while a reconnect loop is awaiting that very timeout means the
 // callback never runs and the promise never settles: the loop, its generator,
@@ -323,6 +387,7 @@ async function main() {
     await checkStreamCancels(io, token);
     io.dispose();
 
+    await checkRequestsBesideLongPolls();
     await checkDelaySettlesOnCancel();
 
     if (failures > 0) {
