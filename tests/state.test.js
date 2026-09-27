@@ -427,6 +427,18 @@ describe('changed', () => {
         expect(changed(before, after)).toContain('nodes');
     });
 
+    // A peer named from its HostName until its DNS name arrives keeps the
+    // same name throughout, so only the name to copy moves.
+    it("notices a peer's DNS name changing when its name does not", () => {
+        const before = applyStatus(
+            initialState(),
+            status({ Peer: rawPeerMap(rawPeer({ DNSName: '' })) }),
+        );
+        const after = applyStatus(before, status());
+
+        expect(changed(before, after)).toEqual(['nodes']);
+    });
+
     it('notices health changing', () => {
         const before = applyStatus(initialState(), status());
         const after = applyStatus(before, status({ Health: ['something'] }));

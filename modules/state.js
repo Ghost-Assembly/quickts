@@ -336,7 +336,8 @@ const sameStrings = (a, b) => sameBy(a, b, (value, other) => value === other);
 // CountryCode off the second to label and group the country list. Leaving
 // them out meant a node moving city, or gaining the Mullvad tag, produced no
 // 'nodes' field and so no redraw — a menu left quietly stale with nothing
-// logged.
+// logged. dnsName likewise: it decides whether "Copy DNS name" is offered and
+// what it copies.
 const sameNodes = (a, b) =>
     sameBy(
         a,
@@ -352,7 +353,8 @@ const sameNodes = (a, b) =>
             node.isMullvad === other.isMullvad &&
             node.location?.City === other.location?.City &&
             node.location?.CountryCode === other.location?.CountryCode &&
-            node.ips.at(0) === other.ips.at(0),
+            node.ips.at(0) === other.ips.at(0) &&
+            node.dnsName === other.dnsName,
     );
 
 const sameProfiles = (a, b) =>

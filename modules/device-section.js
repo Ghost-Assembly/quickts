@@ -52,8 +52,7 @@ export class DeviceSection {
                 this._visibleNodes(state).find(node => node.id === id) ?? null,
             detailTitle: node => node.name,
             renderList: (menu, state, open) => this._renderDevices(menu, state, open),
-            renderDetail: (menu, node, state) =>
-                this._renderDeviceActions(menu, node, state),
+            renderDetail: (menu, node) => this._renderDeviceActions(menu, node),
         });
     }
 
@@ -113,16 +112,11 @@ export class DeviceSection {
      *
      * @param {object} menu The submenu to fill.
      * @param {object} node A normalized node.
-     * @param {object} state A snapshot.
      */
-    _renderDeviceActions(menu, node, state) {
+    _renderDeviceActions(menu, node) {
         const { _ } = this._i18n;
 
         const address = node.ips.at(0) ?? '';
-        const fqdn =
-            node.name && state.magicDNSSuffix
-                ? `${node.name}.${state.magicDNSSuffix}`
-                : node.name;
 
         if (address === '') {
             addDisabledRow(menu, _('No address'));
@@ -147,12 +141,12 @@ export class DeviceSection {
             this,
         );
 
-        if (fqdn && fqdn !== node.name) {
+        if (node.dnsName) {
             addRow(
                 menu,
                 _('Copy DNS name'),
                 'edit-copy-symbolic',
-                () => copyText(fqdn, this._gicon, this._i18n),
+                () => copyText(node.dnsName, this._gicon, this._i18n),
                 this,
             );
         }
