@@ -26,6 +26,9 @@ export const SOCKET_PATHS = Object.freeze([
 
 const BASE = '/localapi/v0';
 
+/** The media type the daemon answers in, and QuickTS sends a body in. */
+export const JSON_TYPE = 'application/json';
+
 /**
  * The first socket path that exists.
  *
@@ -35,6 +38,22 @@ const BASE = '/localapi/v0';
  */
 export function pickSocket(paths, exists) {
     return paths.find(path => exists(path)) ?? null;
+}
+
+/**
+ * Whether an answer's Content-Type says its body is JSON.
+ *
+ * A prefix, not equality: a Content-Type may carry parameters, and
+ * "application/json; charset=utf-8" compared for equality would make every
+ * response decode as a raw string. The reducer would then read undefined off
+ * it everywhere and the menu would go blank while still reporting itself
+ * reachable, with nothing logged.
+ *
+ * @param {string|null} contentType The Content-Type header, or null if none.
+ * @returns {boolean} True if the body should be parsed as JSON.
+ */
+export function isJsonContentType(contentType) {
+    return (contentType ?? '').split(';', 1)[0].trim().startsWith(JSON_TYPE);
 }
 
 /**

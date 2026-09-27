@@ -7,6 +7,7 @@ import {
     isActionable,
     problemMessage,
     reasonForIoError,
+    reasonForStatus,
     reasonOf,
 } from '../modules/errors.js';
 
@@ -204,5 +205,21 @@ describe('reasonForIoError', () => {
         ])('reports $name as $reason', ({ code, reason }) => {
             expect(reasonForIoError(code, IO, { local: true })).toBe(reason);
         });
+    });
+});
+
+describe('reasonForStatus', () => {
+    it.each([200, 204, 299])('takes %i as success', status => {
+        expect(reasonForStatus(status)).toBeNull();
+    });
+
+    // What tailscaled answers a user who is not the operator, and the single
+    // most common reason this extension appears to do nothing at all.
+    it.each([401, 403])('reports %i as a permission failure', status => {
+        expect(reasonForStatus(status)).toBe(REASON.PERMISSION_DENIED);
+    });
+
+    it.each([199, 304, 400, 404, 500, 503])('reports %i as a refusal', status => {
+        expect(reasonForStatus(status)).toBe(REASON.HTTP);
     });
 });

@@ -1,12 +1,13 @@
 // What went wrong talking to tailscaled, as a value rather than a string.
 //
-// This file imports nothing. modules/io.js is the only place with Gio in
-// scope, so it reads the code off a GError and hands it here, with
-// Gio.IOErrorEnum passed in rather than imported; the reason is decided here
-// and io.js throws it. Everything downstream — the reducer, the menu, the
-// tests — reasons about the symbol.
+// This file imports nothing. modules/io.js is the only place with Gio and
+// Soup in scope, so it reads the code off a GError, or the status off an
+// answer, and hands it here, with Gio.IOErrorEnum passed in rather than
+// imported; the reason is decided here and io.js throws it. Everything
+// downstream — the reducer, the menu, the tests — reasons about the symbol.
 //
-// The division is deliberate: io.js knows Gio, this file knows what it means.
+// The division is deliberate: io.js knows Gio and Soup, this file knows what
+// they mean.
 
 /**
  * Why a request failed.
@@ -111,6 +112,28 @@ export function reasonForIoError(
         default:
             return REASON.UNKNOWN;
     }
+}
+
+const UNAUTHORIZED = 401;
+const FORBIDDEN = 403;
+
+/**
+ * The reason to report for an HTTP status the daemon answered with.
+ *
+ * 403 is the interesting one: it is what tailscaled returns to a user who is
+ * not the tailscale operator, and it is the single most common reason this
+ * extension appears to do nothing at all.
+ *
+ * @param {number} status The HTTP status.
+ * @returns {string|null} One of {@link REASON}, or null for a 2xx, which is
+ *   an answer to use rather than a failure.
+ */
+export function reasonForStatus(status) {
+    if (status >= 200 && status < 300) return null;
+
+    return status === UNAUTHORIZED || status === FORBIDDEN
+        ? REASON.PERMISSION_DENIED
+        : REASON.HTTP;
 }
 
 /** The one command that fixes a permission failure. */

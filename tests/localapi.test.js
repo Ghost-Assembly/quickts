@@ -8,6 +8,7 @@ import {
     currentProfileRequest,
     filePutRequest,
     fileTargetsRequest,
+    isJsonContentType,
     loginRequest,
     patchPrefsRequest,
     pickSocket,
@@ -216,4 +217,24 @@ describe('HOST', () => {
     it('is the name tailscaled expects', () => {
         expect(HOST).toBe('local-tailscaled.sock');
     });
+});
+
+describe('isJsonContentType', () => {
+    // A prefix, not equality: compared whole, a Content-Type with parameters
+    // decoded every response as a raw string, and the menu went blank while
+    // still reporting itself reachable.
+    it.each([
+        'application/json',
+        'application/json; charset=utf-8',
+        ' application/json',
+    ])('reads %j as JSON', contentType => {
+        expect(isJsonContentType(contentType)).toBe(true);
+    });
+
+    it.each(['text/plain; charset=utf-8', 'application/octet-stream', '', null])(
+        'reads %j as text',
+        contentType => {
+            expect(isJsonContentType(contentType)).toBe(false);
+        },
+    );
 });
