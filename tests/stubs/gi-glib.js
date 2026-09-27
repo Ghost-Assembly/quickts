@@ -68,4 +68,12 @@ export default {
     // pass unless the test injects its own clock.
     get_monotonic_time: () => 42_000_000,
     uuid_string_random: () => '00000000-0000-4000-8000-000000000000',
+
+    // Only the signature is kept: a caller builds one to pass to a D-Bus call,
+    // and no fake reads it back.
+    VariantType: class VariantType {
+        constructor(signature) {
+            this.signature = signature;
+        }
+    },
 };

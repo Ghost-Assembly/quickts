@@ -119,6 +119,47 @@ describe('received files', () => {
         expect(daemon.saved).toHaveLength(1);
     });
 
+    // Saved, but tailscaled would not remove it from its inbox. The file is on
+    // disk, so the row says so; offering it again on the next open would save
+    // a duplicate "report (1).pdf".
+    it('shows a file saved when the daemon will not forget it, and does not offer it again', async () => {
+        const { panel, model, daemon } = setup();
+        withFiles(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        daemon.failures.set('DELETE /localapi/v0/files/report.pdf', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(row.text).toBe('Saved to /home/someone/Downloads/report.pdf');
+        expect(row.sensitive).toBe(false);
+        expect(Main.osdMessages.at(-1).label).toBe('Saved report.pdf');
+
+        daemon.failures.clear();
+        daemon.reset();
+        toggleOf().menu.close();
+        toggleOf().menu.open();
+        await settle();
+
+        const rows = toggleOf()._inbox.menu.items.map(item => item.text);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toContain('notes.txt');
+        expect(toggleOf()._inbox.label.text).toBe('1 received file');
+        expect(daemon.saved).toHaveLength(1);
+        // Hidden, not deleted: it stays in Tailscale's inbox.
+        expect(daemon.pathsMatching('report.pdf')).toEqual([]);
+        expect(daemon.deleted).toEqual([]);
+    });
+
     it('does not forget a file it could not save', async () => {
         const { panel, model, daemon } = setup();
         withFiles(daemon);

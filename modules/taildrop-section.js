@@ -286,7 +286,7 @@ export class InboxSection {
         row.label.text = fill(_('Saving %s…'), file.name);
         row.setSensitive(false);
 
-        const { path, error } = await this._model.saveFile(file.name);
+        const { path, error } = await this._model.saveFile(file.name, file.size);
         if (generation !== this._generation) return;
 
         if (error) {
