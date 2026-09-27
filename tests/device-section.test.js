@@ -153,6 +153,50 @@ describe('devices', () => {
         expect(clipboard.CLIPBOARD).toBe(`laptop.${SUFFIX}`);
     });
 
+    // Rebuilding the name from the display name and this tailnet's suffix
+    // copied a name that resolves nowhere for a node that does not live under
+    // this tailnet's suffix.
+    it.each([
+        [
+            'a node shared in from another tailnet',
+            'laptop.other-tailnet.ts.net.',
+            'laptop.other-tailnet',
+            'laptop.other-tailnet.ts.net',
+        ],
+        [
+            'a Mullvad node',
+            'se-sto-wg-001.mullvad.ts.net.',
+            'se-sto-wg-001.mullvad',
+            'se-sto-wg-001.mullvad.ts.net',
+        ],
+    ])(
+        'copies the DNS name of %s as the daemon gives it',
+        async (_reason, DNSName, name, copied) => {
+            const { panel, model, daemon } = setup();
+            daemon.responses.status.Peer = rawPeerMap(rawPeer({ DNSName }));
+            panel.enable();
+            await model.start();
+            await settle();
+
+            deviceActions(name)
+                .find(item => item.text === 'Copy DNS name')
+                .activate();
+
+            expect(clipboard.CLIPBOARD).toBe(copied);
+        },
+    );
+
+    // Named from its HostName instead, which is no DNS name at all.
+    it('does not offer Copy DNS name for a peer without one', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.status.Peer = rawPeerMap(rawPeer({ DNSName: '' }));
+        panel.enable();
+        await model.start();
+        await settle();
+
+        expect(labelsOf(deviceActions())).not.toContain('Copy DNS name');
+    });
+
     it('does not offer Send files to a device that cannot receive', async () => {
         const { panel, model, daemon } = setup();
         daemon.responses.status.Peer = rawPeerMap(rawPeer({ TaildropTarget: 5 }));
@@ -288,7 +332,7 @@ describe('devices', () => {
         });
 
         // modules/model.js's ping() used to hand this row modules/errors.js's
-        // already-composed English (messageFor(reasonOf(error))), and
+        // already-composed English, and
         // _(result.error) then asked gettext to translate a sentence it can
         // never see when the .pot file is built — only a literal string
         // reaches xgettext. REASON.PERMISSION_DENIED is the one reason whose

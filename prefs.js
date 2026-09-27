@@ -19,27 +19,18 @@ import {
 } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import { CancelToken } from './modules/cancel.js';
-import { messageFor, reasonOf } from './modules/errors.js';
+import { problemMessage, reasonOf } from './modules/errors.js';
 import { createIo } from './modules/io.js';
 import { patchPrefsRequest, prefsRequest } from './modules/localapi.js';
 import { parseRoutes, subnetRoutes, withSubnets } from './modules/routes.js';
-import { KEYS, SETTINGS, SHORTCUT_KEYS } from './modules/settings.js';
+import { KEYS, SHORTCUT_KEYS, settingText } from './modules/settings.js';
 import {
     CAPTURE_ASSIGN,
     CAPTURE_CANCEL,
     CAPTURE_CLEAR,
     captureOutcome,
 } from './modules/shortcuts.js';
-
-/**
- * How modules/settings.js describes one key.
- *
- * @param {string} key A key from KEYS or SHORTCUT_KEYS.
- * @returns {{label: string, detail: string}} Its untranslated wording.
- */
-function describe(key) {
-    return SETTINGS.find(setting => setting.key === key);
-}
+import { fill } from './modules/text.js';
 
 // The Gdk and Gtk values modules/shortcuts.js needs. Passed in rather than
 // imported there, so the rules themselves stay testable on plain Node.
@@ -55,31 +46,6 @@ const GTK_BINDING = {
     },
     acceleratorValid: (keyval, mask) => Gtk.accelerator_valid(keyval, mask),
 };
-
-/**
- * Stop GNOME acting on its own shortcuts while one is being captured, so a
- * combination like Super or Print SysRq reaches the capture dialog and can be
- * refused there, instead of opening the overview or taking a screenshot out
- * from under it. gnome-control-center does the same; the Shell may ask the
- * user first the first time an extension asks for this.
- *
- * Same approach as quickclip's prefs.js.
- *
- * @param {Gtk.Widget} widget Any widget belonging to the surface to inhibit —
- *   the capture dialog itself, once presented.
- * @returns {Function} Call once, on every way out, to give the shortcuts back.
- */
-function inhibitSystemShortcuts(widget) {
-    const surface = widget.get_native()?.get_surface();
-    // Only a Gdk.Toplevel surface has these; never let prefs throw without.
-    if (
-        typeof surface?.inhibit_system_shortcuts !== 'function' ||
-        typeof surface.restore_system_shortcuts !== 'function'
-    )
-        return () => {};
-    surface.inhibit_system_shortcuts(null);
-    return () => surface.restore_system_shortcuts();
-}
 
 const ShortcutRow = GObject.registerClass(
     class QuickTSShortcutRow extends Adw.ActionRow {
@@ -137,10 +103,14 @@ const ShortcutRow = GObject.registerClass(
             const controller = new Gtk.EventControllerKey();
             controller.connect('key-pressed', (_controller, keyval, keycode, state) => {
                 const mask = state & Gtk.accelerator_get_default_mod_mask();
+                const codePoint = Gdk.keyval_to_unicode(keyval);
 
                 // The decision lives in modules/shortcuts.js and is tested
                 // there; this only carries it out on the widgets.
-                const outcome = captureOutcome(keyval, mask, GTK_BINDING);
+                const outcome = captureOutcome(keyval, mask, {
+                    ...GTK_BINDING,
+                    codePoint,
+                });
 
                 if (outcome === CAPTURE_CANCEL) {
                     dialog.close();
@@ -163,13 +133,31 @@ const ShortcutRow = GObject.registerClass(
             });
             dialog.add_controller(controller);
 
-            dialog.present();
+            // Stop GNOME acting on its own shortcuts while one is being
+            // captured, so a combination like Super or Print SysRq reaches
+            // this dialog and can be refused or bound here, instead of opening
+            // the overview or taking a screenshot out from under it. Mutter
+            // runs global keybindings before a focused client sees the key
+            // unless that client's surface inhibits them. gnome-control-center
+            // does the same; the Shell may ask the user first the first time
+            // an extension asks for this.
+            //
+            // Inhibited on map rather than right after present(), because the
+            // surface exists only once the window is realized, and restored on
+            // unmap, so that every way out — Escape, Backspace, an assigned
+            // key, the window's own close button — gives the shortcuts back.
+            // The same timing as QuickTiler's prefs.js.
+            dialog.connect('map', () => {
+                const surface = dialog.get_surface();
+                if (surface instanceof Gdk.Toplevel)
+                    surface.inhibit_system_shortcuts(null);
+            });
+            dialog.connect('unmap', () => {
+                const surface = dialog.get_surface();
+                if (surface instanceof Gdk.Toplevel) surface.restore_system_shortcuts();
+            });
 
-            // 'close-request' fires on every way out: Escape, Backspace and
-            // an assigned key all call dialog.close() above, and so does the
-            // window's own close button.
-            const restore = inhibitSystemShortcuts(dialog);
-            dialog.connect('close-request', () => restore());
+            dialog.present();
         }
     },
 );
@@ -216,7 +204,7 @@ const RoutesRow = GObject.registerClass(
                 this.text = subnetRoutes(prefs.AdvertiseRoutes).join(', ');
             } catch (error) {
                 this.sensitive = false;
-                this._say(_(messageFor(reasonOf(error))));
+                this._say(problemMessage(reasonOf(error), _));
                 console.warn(`[quickts] could not read routes: ${error}`);
             }
         }
@@ -229,7 +217,7 @@ const RoutesRow = GObject.registerClass(
                 // Reported rather than dropped: silently discarding a typo
                 // would leave someone believing a subnet is advertised.
                 this.add_css_class('error');
-                this._say(_('Not a subnet: %s').replace('%s', invalid.join(', ')));
+                this._say(fill(_('Not a subnet: %s'), invalid.join(', ')));
                 return;
             }
 
@@ -247,7 +235,7 @@ const RoutesRow = GObject.registerClass(
                 );
                 this._say(_('Advertised subnets updated'));
             } catch (error) {
-                this._say(_(messageFor(reasonOf(error))));
+                this._say(problemMessage(reasonOf(error), _));
                 console.warn(`[quickts] could not set routes: ${error}`);
             }
         }
@@ -270,10 +258,10 @@ export default class QuickTSPreferences extends ExtensionPreferences {
         // Titled from modules/settings.js, which is where a key is described,
         // and bound the one way every row is bound.
         const addRow = (group, key, row, property) => {
-            const { label, detail } = describe(key);
+            const { label, detail } = settingText(key, _);
 
-            row.title = _(label);
-            row.subtitle = _(detail);
+            row.title = label;
+            row.subtitle = detail;
             settings.bind(key, row, property, Gio.SettingsBindFlags.DEFAULT);
             group.add(row);
         };
@@ -324,12 +312,13 @@ export default class QuickTSPreferences extends ExtensionPreferences {
         page.add(routing);
 
         const shortcut = new Adw.PreferencesGroup({ title: _('Keyboard shortcut') });
+        const openMenu = settingText(SHORTCUT_KEYS.OPEN_MENU, _);
         shortcut.add(
             new ShortcutRow(
                 settings,
                 SHORTCUT_KEYS.OPEN_MENU,
-                _(describe(SHORTCUT_KEYS.OPEN_MENU).label),
-                _(describe(SHORTCUT_KEYS.OPEN_MENU).detail),
+                openMenu.label,
+                openMenu.detail,
             ),
         );
         page.add(shortcut);

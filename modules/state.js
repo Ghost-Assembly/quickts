@@ -28,6 +28,14 @@ export function initialState() {
         reachable: false,
         errorReason: '',
 
+        // Why the daemon, reachable, last refused a change. Set only for a
+        // refusal; an unreachable daemon is errorReason's to report.
+        refusedReason: '',
+        // Every change that failed, refused or unreachable alike. The count is
+        // what makes a failure that leaves every other field as it was a
+        // change of its own; see applyRefusal() and applyChangeError().
+        refusedCount: 0,
+
         // From /status.
         backendState: BACKEND.NO_STATE,
         authUrl: '',
@@ -85,8 +93,14 @@ function derive(state) {
             : { ...node, isExitNode: node.id !== '' && node.id === state.exitNodeId },
     );
 
-    // Re-sorted because the exit node sorts first, and it may have moved.
-    const nodes = sortNodes(marked);
+    // Re-sorted because the exit node sorts first, and it may have moved —
+    // but only if a node was re-marked. The nodes arrive sorted, from
+    // normalizePeers or from the last derive, and nothing else here moves
+    // one, so an unchanged list is kept as the same array: no sort, and
+    // changed() can settle 'nodes' by identity.
+    const nodes = marked.every((node, index) => node === state.nodes.at(index))
+        ? state.nodes
+        : sortNodes(marked);
 
     return Object.freeze({
         ...state,
@@ -147,6 +161,8 @@ export function applyPrefs(state, prefs) {
         ...state,
         reachable: true,
         errorReason: '',
+        // The daemon's current answer; a refusal before it is no longer news.
+        refusedReason: '',
 
         running: prefs?.WantRunning === true,
         acceptRoutes: prefs?.RouteAll === true,
@@ -217,6 +233,54 @@ export function applyError(state, reason) {
         ...state,
         reachable: false,
         errorReason: reason || REASON.UNKNOWN,
+        // A refusal from before contact was lost is stale; kept, it would
+        // come back with the first status read after reconnecting.
+        refusedReason: '',
+    });
+}
+
+/**
+ * Record that the daemon refused a change.
+ *
+ * It answered, so it is still reachable and everything already read still
+ * holds; the change just did not happen. The menu sets a flipped switch back
+ * from the unchanged preferences whenever it is told something moved, so the
+ * count moves on every failed change: a second refusal with the same reason
+ * would otherwise change nothing, tell nobody, and leave the switch showing
+ * what the daemon refused.
+ *
+ * @param {object} state Current state.
+ * @param {string} reason One of {@link REASON}.
+ * @returns {object} A new state.
+ */
+export function applyRefusal(state, reason) {
+    return derive({
+        ...state,
+        refusedReason: reason || REASON.UNKNOWN,
+        refusedCount: state.refusedCount + 1,
+    });
+}
+
+/**
+ * Record a change that failed because the daemon could not be reached.
+ *
+ * applyError, with the change counted as applyRefusal counts one, in a single
+ * snapshot so subscribers hear about it once. The count matters most when the
+ * daemon was already unreachable for the same reason — a stopped tailscaled,
+ * a user who is not the operator — because then nothing else moves, and
+ * without it the switch that was flipped would stay flipped.
+ *
+ * @param {object} state Current state.
+ * @param {string} reason One of {@link REASON}.
+ * @returns {object} A new state.
+ */
+export function applyChangeError(state, reason) {
+    return derive({
+        ...state,
+        reachable: false,
+        errorReason: reason || REASON.UNKNOWN,
+        refusedReason: '',
+        refusedCount: state.refusedCount + 1,
     });
 }
 
@@ -253,6 +317,8 @@ export function changed(previous, next) {
 const SCALARS = Object.freeze([
     ['reachable', s => s.reachable],
     ['errorReason', s => s.errorReason],
+    ['refusedReason', s => s.refusedReason],
+    ['refusedCount', s => s.refusedCount],
     ['backendState', s => s.backendState],
     ['authUrl', s => s.authUrl],
     ['magicDNSSuffix', s => s.magicDNSSuffix],
@@ -268,10 +334,12 @@ const SCALARS = Object.freeze([
     ['currentProfileId', s => s.currentProfileId],
 ]);
 
-// All three list comparisons are the same shape — equal lengths, then
-// element-wise — so only the per-element test is written out.
+// All three list comparisons are the same shape — the same array, or equal
+// lengths and then element-wise — so only the per-element test is written
+// out.
 const sameBy = (a, b, equal) =>
-    a.length === b.length && a.every((value, index) => equal(value, b.at(index)));
+    a === b ||
+    (a.length === b.length && a.every((value, index) => equal(value, b.at(index))));
 
 const sameStrings = (a, b) => sameBy(a, b, (value, other) => value === other);
 
@@ -280,7 +348,8 @@ const sameStrings = (a, b) => sameBy(a, b, (value, other) => value === other);
 // CountryCode off the second to label and group the country list. Leaving
 // them out meant a node moving city, or gaining the Mullvad tag, produced no
 // 'nodes' field and so no redraw — a menu left quietly stale with nothing
-// logged.
+// logged. dnsName likewise: it decides whether "Copy DNS name" is offered and
+// what it copies.
 const sameNodes = (a, b) =>
     sameBy(
         a,
@@ -296,7 +365,8 @@ const sameNodes = (a, b) =>
             node.isMullvad === other.isMullvad &&
             node.location?.City === other.location?.City &&
             node.location?.CountryCode === other.location?.CountryCode &&
-            node.ips.at(0) === other.ips.at(0),
+            node.ips.at(0) === other.ips.at(0) &&
+            node.dnsName === other.dnsName,
     );
 
 const sameProfiles = (a, b) =>

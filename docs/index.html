@@ -1179,9 +1179,13 @@
                         </tbody>
                     </table>
                     <p>
-                        A bare key, or one with only <kbd class="kbd">Shift</kbd>, is
-                        not accepted: it would be taken from every application. The
-                        shortcut does nothing on the lock screen or the login screen.
+                        A bare key is not accepted: it would be taken from every
+                        application. <kbd class="kbd">Shift</kbd> alone is accepted only
+                        with a key that types nothing, such as
+                        <kbd class="kbd">Shift</kbd>+<kbd class="kbd">F5</kbd>;
+                        <kbd class="kbd">Shift</kbd>+<kbd class="kbd">A</kbd> is how a
+                        capital A is typed. The shortcut does nothing on the lock screen
+                        or the login screen.
                     </p>
                     <p>
                         It is stored under <code>quickts-open-menu</code>. The prefix
@@ -1420,7 +1424,7 @@
                                     <code>menu-items.js</code>,
                                     <code>navigable-section.js</code>,
                                     <code>ping.js</code>, <code>settings.js</code>,
-                                    <code>taildrop.js</code>
+                                    <code>taildrop.js</code>, <code>text.js</code>
                                 </td>
                             </tr>
                             <tr>
@@ -1429,7 +1433,9 @@
                                     Why a request to tailscaled failed, as a
                                     <code>REASON</code> value rather than a string.
                                 </td>
-                                <td data-label="Imports" class="muted">—</td>
+                                <td data-label="Imports" class="muted">
+                                    <code>text.js</code>
+                                </td>
                             </tr>
                             <tr>
                                 <td data-label="Module">
@@ -1443,7 +1449,7 @@
                                 <td data-label="Imports" class="muted">
                                     <code>menu-items.js</code>, <code>mullvad.js</code>,
                                     <code>navigable-section.js</code>,
-                                    <code>settings.js</code>
+                                    <code>settings.js</code>, <code>text.js</code>
                                 </td>
                             </tr>
                             <tr>
@@ -1499,7 +1505,8 @@
                                     menu shares.
                                 </td>
                                 <td data-label="Imports" class="muted">
-                                    <code>errors.js</code>, <code>warnings.js</code>
+                                    <code>errors.js</code>, <code>text.js</code>,
+                                    <code>warnings.js</code>
                                 </td>
                             </tr>
                             <tr>
@@ -1552,7 +1559,8 @@
                                     <code>health.js</code>, <code>layout.js</code>,
                                     <code>menu-items.js</code>, <code>routes.js</code>,
                                     <code>settings.js</code>,
-                                    <code>taildrop-section.js</code>
+                                    <code>taildrop-section.js</code>,
+                                    <code>text.js</code>
                                 </td>
                             </tr>
                             <tr>
@@ -1626,7 +1634,7 @@
                                 </td>
                                 <td data-label="Imports" class="muted">
                                     <code>inbox.js</code>, <code>menu-items.js</code>,
-                                    <code>taildrop.js</code>
+                                    <code>taildrop.js</code>, <code>text.js</code>
                                 </td>
                             </tr>
                             <tr>
@@ -1637,6 +1645,15 @@
                                 <td data-label="Imports" class="muted">
                                     <code>collate.js</code>
                                 </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Module"><code>text.js</code></td>
+                                <td data-label="Job">
+                                    Fills a translated sentence's <code>%s</code> and
+                                    <code>%d</code> in order, without reading
+                                    <code>$</code> patterns in the values.
+                                </td>
+                                <td data-label="Imports" class="muted">—</td>
                             </tr>
                             <tr>
                                 <td data-label="Module"><code>timing.js</code></td>

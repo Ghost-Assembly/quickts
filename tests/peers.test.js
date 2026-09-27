@@ -135,8 +135,32 @@ describe('normalizePeer', () => {
             canBeExitNode: false,
             isMullvad: false,
             icon: 'computer-symbolic',
+            dnsName: `laptop.${SUFFIX}`,
         });
         expect(node.ips).toEqual(['100.64.0.1', 'fd7a:115c:a1e0::1']);
+    });
+
+    // The name to copy is the daemon's own, not one rebuilt from the display
+    // name and this tailnet's suffix: a node shared in from another tailnet,
+    // or one of Mullvad's, does not live under this tailnet's suffix.
+    it.each([
+        ['a node of this tailnet', `laptop.${SUFFIX}.`, `laptop.${SUFFIX}`],
+        [
+            'a node shared in from another tailnet',
+            'laptop.other-tailnet.ts.net.',
+            'laptop.other-tailnet.ts.net',
+        ],
+        [
+            'a Mullvad node',
+            'se-sto-wg-001.mullvad.ts.net.',
+            'se-sto-wg-001.mullvad.ts.net',
+        ],
+        ['a peer with no DNS name', '', ''],
+        ['a peer whose DNS name is absent', undefined, ''],
+    ])('keeps the DNS name of %s', (_reason, DNSName, dnsName) => {
+        const node = normalizePeer(rawPeer({ DNSName }), { magicDNSSuffix: SUFFIX });
+
+        expect(node.dnsName).toBe(dnsName);
     });
 
     // The preference is what flips the instant the user clicks; the peer's own

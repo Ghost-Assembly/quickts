@@ -17,6 +17,7 @@ import {
     problemMessage,
 } from './menu-items.js';
 import { NavigableSection } from './navigable-section.js';
+import { fill } from './text.js';
 
 /** The device submenu. */
 export class DeviceSection {
@@ -52,8 +53,7 @@ export class DeviceSection {
                 this._visibleNodes(state).find(node => node.id === id) ?? null,
             detailTitle: node => node.name,
             renderList: (menu, state, open) => this._renderDevices(menu, state, open),
-            renderDetail: (menu, node, state) =>
-                this._renderDeviceActions(menu, node, state),
+            renderDetail: (menu, node) => this._renderDeviceActions(menu, node),
         });
     }
 
@@ -113,16 +113,11 @@ export class DeviceSection {
      *
      * @param {object} menu The submenu to fill.
      * @param {object} node A normalized node.
-     * @param {object} state A snapshot.
      */
-    _renderDeviceActions(menu, node, state) {
+    _renderDeviceActions(menu, node) {
         const { _ } = this._i18n;
 
         const address = node.ips.at(0) ?? '';
-        const fqdn =
-            node.name && state.magicDNSSuffix
-                ? `${node.name}.${state.magicDNSSuffix}`
-                : node.name;
 
         if (address === '') {
             addDisabledRow(menu, _('No address'));
@@ -147,12 +142,12 @@ export class DeviceSection {
             this,
         );
 
-        if (fqdn && fqdn !== node.name) {
+        if (node.dnsName) {
             addRow(
                 menu,
                 _('Copy DNS name'),
                 'edit-copy-symbolic',
-                () => copyText(fqdn, this._gicon, this._i18n),
+                () => copyText(node.dnsName, this._gicon, this._i18n),
                 this,
             );
         }
@@ -228,12 +223,10 @@ export class DeviceSection {
 function formatPing(result, { _ }) {
     const latency = String(result.latencyMs);
 
-    if (result.route === ROUTE.DIRECT) return _('%s ms, direct').replace('%s', latency);
+    if (result.route === ROUTE.DIRECT) return fill(_('%s ms, direct'), latency);
     if (result.route === ROUTE.RELAY && result.relay)
-        return _('%s ms, relayed via %s')
-            .replace('%s', latency)
-            .replace('%s', result.relay);
-    if (result.route === ROUTE.RELAY) return _('%s ms, relayed').replace('%s', latency);
+        return fill(_('%s ms, relayed via %s'), latency, result.relay);
+    if (result.route === ROUTE.RELAY) return fill(_('%s ms, relayed'), latency);
 
-    return _('%s ms').replace('%s', latency);
+    return fill(_('%s ms'), latency);
 }

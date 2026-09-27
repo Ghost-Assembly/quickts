@@ -17,6 +17,7 @@ import {
     unlistedReason,
 } from './taildrop.js';
 import { ActionMenuItem, problemMessage, showOsd } from './menu-items.js';
+import { fill } from './text.js';
 
 /**
  * Why a node cannot receive a file, translated.
@@ -149,7 +150,7 @@ export class SendSection {
         // first means nobody picks files for a send that cannot happen.
         if (!isListedTarget(await this._model.fileTargets(), node.id)) {
             Main.notify(
-                _('Cannot send to %s').replace('%s', node.name),
+                fill(_('Cannot send to %s'), node.name),
                 _('Tailscale does not list it as able to receive files right now.'),
             );
             return;
@@ -158,7 +159,7 @@ export class SendSection {
         let uris;
         try {
             uris = await this._chooseFiles({
-                title: _('Send to %s').replace('%s', node.name),
+                title: fill(_('Send to %s'), node.name),
             });
         } catch (error) {
             // The portal rejects when xdg-desktop-portal is not installed
@@ -179,19 +180,21 @@ export class SendSection {
         if (sent > 0)
             showOsd(
                 this._gicon,
-                _n('Sent %d file to %s', 'Sent %d files to %s', sent)
-                    .replace('%d', String(sent))
-                    .replace('%s', node.name),
+                fill(
+                    // Translators: the placeholders are filled in order, the
+                    // count first and then the device name, so keep %d
+                    // before %s.
+                    _n('Sent %d file to %s', 'Sent %d files to %s', sent),
+                    sent,
+                    node.name,
+                ),
             );
 
         // Main.notify, not Main.notifyError: notifyError also copies its
         // text to the journal, and a node name and file names are
         // exactly what SECURITY.md promises stay out of it.
         if (failed.length > 0)
-            Main.notify(
-                _('Could not send to %s').replace('%s', node.name),
-                failed.join(', '),
-            );
+            Main.notify(fill(_('Could not send to %s'), node.name), failed.join(', '));
     }
 }
 
@@ -251,11 +254,10 @@ export class InboxSection {
         this.item.visible = files.length > 0;
         if (!this.item.visible) return;
 
-        this.item.label.text = _n(
-            '%d received file',
-            '%d received files',
+        this.item.label.text = fill(
+            _n('%d received file', '%d received files', files.length),
             files.length,
-        ).replace('%d', String(files.length));
+        );
 
         for (const file of files)
             this.item.menu.addMenuItem(
@@ -281,7 +283,7 @@ export class InboxSection {
         const { _ } = this._i18n;
 
         const generation = this._generation;
-        row.label.text = _('Saving %s…').replace('%s', file.name);
+        row.label.text = fill(_('Saving %s…'), file.name);
         row.setSensitive(false);
 
         const { path, error } = await this._model.saveFile(file.name);
@@ -293,7 +295,7 @@ export class InboxSection {
             return;
         }
 
-        row.label.text = _('Saved to %s').replace('%s', path);
-        showOsd(this._gicon, _('Saved %s').replace('%s', file.name));
+        row.label.text = fill(_('Saved to %s'), path);
+        showOsd(this._gicon, fill(_('Saved %s'), file.name));
     }
 }

@@ -38,9 +38,11 @@ import {
 } from './localapi.js';
 import { runWithReconnect } from './reconnect.js';
 import {
+    applyChangeError,
     applyError,
     applyPrefs,
     applyProfiles,
+    applyRefusal,
     applyStatus,
     changed,
     initialState,
@@ -55,6 +57,22 @@ import { backoffDelay, flushDelay } from './timing.js';
 
 /** How long a peer list may go unread while the menu is closed. */
 export const PEERS_STALE_MS = 60000;
+
+/**
+ * The reasons a failed change still marks the daemon unreachable.
+ *
+ * Any other reason means the daemon answered: it refused the change, or said
+ * something unusable about it, and is plainly still there. PERMISSION_DENIED
+ * is answered too, but it is the missing operator, and the operator row that
+ * only an unreachable daemon shows is how anyone finds the command that fixes
+ * it.
+ */
+const UNREACHABLE = new Set([
+    REASON.SOCKET_MISSING,
+    REASON.CONNECTION_REFUSED,
+    REASON.UNKNOWN,
+    REASON.PERMISSION_DENIED,
+]);
 
 /** The store. One per enable/disable lifetime. */
 export class TailscaleModel {
@@ -385,27 +403,27 @@ export class TailscaleModel {
 
     // ---- commands ---------------------------------------------------------
 
-    /** @param {boolean} value Whether the tailnet should be up. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Whether the tailnet should be up. @returns {Promise<{error: string}>} See #patch. */
     setRunning(value) {
         return this.#patch({ WantRunning: Boolean(value) });
     }
 
-    /** @param {boolean} value Accept subnet routes. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Accept subnet routes. @returns {Promise<{error: string}>} See #patch. */
     setAcceptRoutes(value) {
         return this.#patch({ RouteAll: Boolean(value) });
     }
 
-    /** @param {boolean} value Use the tailnet's DNS. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Use the tailnet's DNS. @returns {Promise<{error: string}>} See #patch. */
     setAcceptDNS(value) {
         return this.#patch({ CorpDNS: Boolean(value) });
     }
 
-    /** @param {boolean} value Reach the LAN while using an exit node. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Reach the LAN while using an exit node. @returns {Promise<{error: string}>} See #patch. */
     setAllowLanAccess(value) {
         return this.#patch({ ExitNodeAllowLANAccess: Boolean(value) });
     }
 
-    /** @param {boolean} value Block incoming connections. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Block incoming connections. @returns {Promise<{error: string}>} See #patch. */
     setShieldsUp(value) {
         return this.#patch({ ShieldsUp: Boolean(value) });
     }
@@ -419,7 +437,7 @@ export class TailscaleModel {
      * withdraw a subnet this machine is routing for.
      *
      * @param {boolean} value Whether to advertise as an exit node.
-     * @returns {Promise<void>} Done.
+     * @returns {Promise<{error: string}>} See #patch.
      */
     setRunExitNode(value) {
         return this.#patch({
@@ -427,7 +445,7 @@ export class TailscaleModel {
         });
     }
 
-    /** @param {boolean} value Run the Tailscale SSH server. @returns {Promise<void>} Done. */
+    /** @param {boolean} value Run the Tailscale SSH server. @returns {Promise<{error: string}>} See #patch. */
     setSsh(value) {
         return this.#patch({ RunSSH: Boolean(value) });
     }
@@ -436,7 +454,7 @@ export class TailscaleModel {
      * Route through a peer, or stop doing so.
      *
      * @param {string} id Node id, or '' to use no exit node.
-     * @returns {Promise<void>} Done.
+     * @returns {Promise<{error: string}>} See #patch.
      */
     setExitNode(id) {
         return this.#patch({ ExitNodeID: id ?? '' });
@@ -497,17 +515,37 @@ export class TailscaleModel {
      * is also why a user-initiated change has no bus latency: the round trip
      * that applies it is the same one that reports it.
      *
+     * A change the daemon answered and refused leaves it reachable: one
+     * refused change is not evidence that the daemon has gone. It is recorded
+     * with applyRefusal instead; any other failure marks the daemon
+     * unreachable, through applyChangeError. Both count the failed change,
+     * and that count is what sets a switch the user flipped back to the
+     * preference that still holds — even when nothing else in the state
+     * moved, as when the daemon was already unreachable for the same reason.
+     *
      * @param {Record<string, unknown>} changes Preferences to set.
-     * @returns {Promise<void>} Done.
+     * @returns {Promise<{error: string}>} '' once applied, or canceled;
+     *   otherwise the REASON it failed with.
      */
     async #patch(changes) {
-        if (this.#disposed) return;
+        if (this.#disposed) return { error: '' };
 
         try {
             const prefs = await this.#request(patchPrefsRequest(changes));
             this.#commit(applyPrefs(this.#state, prefs));
+
+            return { error: '' };
         } catch (error) {
-            this.#fail(error);
+            if (isCanceled(error)) return { error: '' };
+
+            const reason = reasonOf(error);
+            this.#commit(
+                UNREACHABLE.has(reason)
+                    ? applyChangeError(this.#state, reason)
+                    : applyRefusal(this.#state, reason),
+            );
+
+            return { error: reason };
         }
     }
 

@@ -20,8 +20,9 @@ testing, packaging and releasing.
 sudo tailscale set --operator=$USER
 ```
 
-Without that, the daemon refuses the socket and QuickTS says so in the menu
-rather than showing a tailnet that is silently disconnected.
+Without it the daemon refuses every change with a `403`. QuickTS says so in
+the menu and offers the command, rather than leaving a switch that silently
+flips back.
 
 ## Install
 

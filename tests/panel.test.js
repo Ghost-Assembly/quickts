@@ -333,8 +333,8 @@ describe('problems and warnings', () => {
         expect(toggleOf()._problems.items.map(item => item.text)).toContain('Log in…');
     });
 
-    // The problem row and the subtitle both word an unreachable daemon from
-    // modules/errors.js's already-composed English (messageFor), and passing
+    // The problem row and the subtitle both used to word an unreachable
+    // daemon from modules/errors.js's already-composed English, and passing
     // that straight to _() asks gettext to translate a sentence it can never
     // see when the .pot file is built — only a literal string reaches
     // xgettext. Every message this scenario hands to gettext must be one.
@@ -441,6 +441,131 @@ describe('the settings switches', () => {
         expect(rowsNamed(toggleOf(), 'Accept routes').at(0)).toBe(before);
         expect(before._wasDestroyed).toBe(false);
     });
+
+    // A switch moves the moment it is flipped, before the daemon has said
+    // anything. A refused change has to set it back, and say why, without
+    // calling a daemon that answered unreachable.
+    it('set themselves back when the daemon refuses the change', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        const subtitle = toggleOf().subtitle;
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        expect(routes.state).toBe(false);
+        expect(model.state.reachable).toBe(true);
+        expect(toggleOf().subtitle).toBe(subtitle);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon refused the request.',
+        ]);
+    });
+
+    // The second refusal leaves every preference exactly as the first did.
+    // Only its being counted tells the menu to look again.
+    it('set themselves back after a second identical refusal', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(2);
+        expect(routes.state).toBe(false);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon refused the request.',
+        ]);
+    });
+
+    // With the daemon already gone, the failure changes nothing but the
+    // count — and that has to be enough to set the switch back.
+    it('set themselves back when the daemon is already unreachable', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/', {
+            name: 'TransportError',
+            reason: REASON.CONNECTION_REFUSED,
+        });
+        await model.refresh();
+        await settle();
+        expect(model.state.errorReason).toBe(REASON.CONNECTION_REFUSED);
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(1);
+        expect(routes.state).toBe(false);
+        expect(labelsOf(toggleOf()._problems.items)).toEqual([
+            'The Tailscale daemon is not running.',
+        ]);
+    });
+
+    // Someone who is not the operator gets a 403 for every change. The
+    // second is identical to the first, and has to set the switch back too.
+    it('set themselves back after a second 403', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.PERMISSION_DENIED,
+        });
+
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+        routes.toggle();
+        await settle();
+
+        expect(daemon.patches).toHaveLength(2);
+        expect(routes.state).toBe(false);
+        expect(
+            toggleOf()._problems.items.some(item =>
+                item.text?.includes('tailscale set --operator='),
+            ),
+        ).toBe(true);
+    });
+
+    it('drop the refusal once a change goes through', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+        const routes = rowsNamed(toggleOf(), 'Accept routes').at(0);
+        routes.toggle();
+        await settle();
+
+        daemon.failures.clear();
+        routes.toggle();
+        await settle();
+
+        expect(routes.state).toBe(true);
+        expect(toggleOf()._problems.items).toEqual([]);
+    });
 });
 
 describe('running as an exit node', () => {
@@ -495,6 +620,27 @@ describe('running as an exit node', () => {
         await settle();
 
         expect(daemon.patches.at(-1).AdvertiseRoutes).toEqual(['192.168.1.0/24']);
+    });
+
+    it('turns itself back off when the daemon refuses, every time', async () => {
+        const { panel, model, daemon } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        daemon.failures.set('/localapi/v0/prefs', {
+            name: 'TransportError',
+            reason: REASON.HTTP,
+        });
+
+        const exitNode = rowsNamed(toggleOf(), 'Run as exit node').at(0);
+        exitNode.activate();
+        await settle();
+        expect(exitNode.state).toBe(false);
+
+        exitNode.activate();
+        await settle();
+        expect(exitNode.state).toBe(false);
+        expect(model.state.reachable).toBe(true);
     });
 });
 
@@ -1225,6 +1371,29 @@ describe('teardown', () => {
         expect(menu._wasDestroyed).toBe(true);
     });
 
+    // Clutter can destroy an actor straight from C, through its own dispose,
+    // which never calls back into an overridden JS destroy() — only the
+    // 'destroy' signal, which every actor emits either way. The model
+    // subscription and the settings handlers are the Panel's, released by
+    // disable() as the tests above check; this is everything the toggle holds.
+    it('releases what the toggle holds when the Shell destroys it directly', async () => {
+        const { panel, model } = setup();
+        panel.enable();
+        await model.start();
+        await settle();
+        Main.press(SHORTCUT_KEYS.OPEN_MENU);
+        const toggle = toggleOf();
+        const menu = toggle.menu;
+        menu.actor.emit('notify::allocation');
+
+        toggle.emit('destroy');
+
+        expect(menu._wasDestroyed).toBe(true);
+        expect(laters.size).toBe(0);
+        // Clutter drops the handlers on the actor itself along with it.
+        expect([...liveHandlers].filter(id => !toggle.handlers.has(id))).toEqual([]);
+    });
+
     it('leaves no layout handler or later behind', async () => {
         const { panel, model } = setup();
         panel.enable();
@@ -1329,6 +1498,33 @@ describe('login', () => {
 
         // The daemon recovers and later reports a URL of its own accord.
         daemon.failures.clear();
+        daemon.responses.status.AuthURL = 'https://login.tailscale.com/a/later';
+        await model.refresh();
+        await settle();
+
+        expect(launchedUris).toEqual([]);
+    });
+
+    // A login that went through without its URL ever reaching the menu — the
+    // browser was opened some other way, or someone ran `tailscale up` —
+    // left the flag set, and the next AuthURL, a reauth hours later, opened a
+    // browser nobody asked for.
+    it('does not stay armed once no login is needed', async () => {
+        const { panel, model, daemon } = setup();
+        loggedOut(daemon);
+        daemon.responses.status.AuthURL = '';
+        panel.enable();
+        await model.start();
+        await settle();
+
+        rowsNamed(toggleOf(), 'Log in…').at(0).activate();
+        await settle();
+
+        daemon.responses.status.BackendState = BACKEND.RUNNING;
+        await model.refresh();
+        await settle();
+
+        daemon.responses.status.BackendState = BACKEND.NEEDS_LOGIN;
         daemon.responses.status.AuthURL = 'https://login.tailscale.com/a/later';
         await model.refresh();
         await settle();

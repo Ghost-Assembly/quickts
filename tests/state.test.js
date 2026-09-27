@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { REASON } from '../modules/errors.js';
 import {
     BACKEND,
+    applyChangeError,
     applyError,
     applyPrefs,
     applyProfiles,
+    applyRefusal,
     applyStatus,
     changed,
     initialState,
@@ -219,6 +221,18 @@ describe('exitNodeName', () => {
 
         expect(state.nodes.at(0).id).toBe('nLAP');
     });
+
+    // Every preferences read went through a sort that could change nothing.
+    // Keeping the same array also lets changed() settle 'nodes' by identity.
+    it('keeps the very same nodes when the exit node did not move', () => {
+        const before = applyPrefs(withPeers(), prefs({ ExitNodeID: 'nGATE' }));
+        const after = applyPrefs(
+            before,
+            prefs({ ExitNodeID: 'nGATE', ShieldsUp: true }),
+        );
+
+        expect(after.nodes).toBe(before.nodes);
+    });
 });
 
 describe('applyProfiles', () => {
@@ -286,6 +300,128 @@ describe('applyError', () => {
     it('falls back to unknown for an empty reason', () => {
         expect(applyError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
     });
+
+    // Losing contact makes a refusal from before it stale. Kept, the "refused
+    // the request" row came back with the first status read after
+    // reconnecting, for a change nobody had made since.
+    it('drops a refusal from before the daemon was lost', () => {
+        const refused = applyRefusal(
+            applyStatus(initialState(), status()),
+            REASON.HTTP,
+        );
+        const back = applyStatus(
+            applyError(refused, REASON.CONNECTION_REFUSED),
+            status(),
+        );
+
+        expect(back.refusedReason).toBe('');
+    });
+});
+
+describe('applyRefusal', () => {
+    // The daemon answered, so it is still there and what was read is still
+    // true. Only the change did not happen.
+    it('keeps the daemon reachable and what was already known', () => {
+        const loaded = applyPrefs(applyStatus(initialState(), status()), prefs());
+        const refused = applyRefusal(loaded, REASON.HTTP);
+
+        expect(refused.reachable).toBe(true);
+        expect(refused.errorReason).toBe('');
+        expect(refused.running).toBe(true);
+        expect(refused.nodes).toHaveLength(1);
+    });
+
+    it('records why, and counts it', () => {
+        const refused = applyRefusal(initialState(), REASON.PROTOCOL);
+
+        expect(refused.refusedReason).toBe(REASON.PROTOCOL);
+        expect(refused.refusedCount).toBe(initialState().refusedCount + 1);
+    });
+
+    it('falls back to unknown for an empty reason', () => {
+        expect(applyRefusal(initialState(), '').refusedReason).toBe(REASON.UNKNOWN);
+    });
+
+    it('starts with nothing refused', () => {
+        expect(initialState().refusedReason).toBe('');
+        expect(initialState().refusedCount).toBe(0);
+    });
+
+    it('is frozen', () => {
+        expect(Object.isFrozen(applyRefusal(initialState(), REASON.HTTP))).toBe(true);
+    });
+
+    // A switch the user flipped is set back from the unchanged preferences
+    // only when a change tells the menu to look. Two refusals in a row with
+    // the same reason would otherwise look like nothing happened the second
+    // time, and leave the switch showing what the daemon refused.
+    it('registers a second identical refusal as a change', () => {
+        const once = applyRefusal(applyPrefs(initialState(), prefs()), REASON.HTTP);
+        const twice = applyRefusal(once, REASON.HTTP);
+
+        expect(changed(once, twice)).toEqual(['refusedCount']);
+    });
+
+    // The next successful read or change is the daemon's current answer, and
+    // the refusal it follows is no longer news.
+    it('is cleared by the next preferences read', () => {
+        const refused = applyRefusal(applyPrefs(initialState(), prefs()), REASON.HTTP);
+        const read = applyPrefs(refused, prefs());
+
+        expect(read.refusedReason).toBe('');
+        expect(changed(refused, read)).toEqual(['refusedReason']);
+    });
+});
+
+describe('applyChangeError', () => {
+    it('marks the daemon unreachable, as applyError does', () => {
+        const loaded = applyPrefs(applyStatus(initialState(), status()), prefs());
+        const failed = applyChangeError(loaded, REASON.CONNECTION_REFUSED);
+
+        expect(failed.reachable).toBe(false);
+        expect(failed.errorReason).toBe(REASON.CONNECTION_REFUSED);
+        expect(failed.nodes).toHaveLength(1);
+        expect(failed.running).toBe(true);
+    });
+
+    // A refusal's message is the daemon answering; this is the daemon gone.
+    it('counts the change without calling it a refusal', () => {
+        const failed = applyChangeError(initialState(), REASON.PERMISSION_DENIED);
+
+        expect(failed.refusedCount).toBe(initialState().refusedCount + 1);
+        expect(failed.refusedReason).toBe('');
+    });
+
+    it('falls back to unknown for an empty reason', () => {
+        expect(applyChangeError(initialState(), '').errorReason).toBe(REASON.UNKNOWN);
+    });
+
+    it('drops a refusal from before the daemon was lost', () => {
+        const refused = applyRefusal(
+            applyStatus(initialState(), status()),
+            REASON.HTTP,
+        );
+        const back = applyStatus(
+            applyChangeError(refused, REASON.CONNECTION_REFUSED),
+            status(),
+        );
+
+        expect(back.refusedReason).toBe('');
+    });
+
+    // Already unreachable for the same reason — a stopped daemon, a user who
+    // is not the operator — the count is the only thing that moves, and it
+    // has to be enough for the menu to set a flipped switch back.
+    it('registers a failure identical to the recorded one as a change', () => {
+        const down = applyError(
+            applyPrefs(initialState(), prefs()),
+            REASON.PERMISSION_DENIED,
+        );
+
+        expect(changed(down, applyChangeError(down, REASON.PERMISSION_DENIED))).toEqual(
+            ['refusedCount'],
+        );
+    });
 });
 
 describe('changed', () => {
@@ -330,6 +466,18 @@ describe('changed', () => {
         );
 
         expect(changed(before, after)).toContain('nodes');
+    });
+
+    // A peer named from its HostName until its DNS name arrives keeps the
+    // same name throughout, so only the name to copy moves.
+    it("notices a peer's DNS name changing when its name does not", () => {
+        const before = applyStatus(
+            initialState(),
+            status({ Peer: rawPeerMap(rawPeer({ DNSName: '' })) }),
+        );
+        const after = applyStatus(before, status());
+
+        expect(changed(before, after)).toEqual(['nodes']);
     });
 
     it('notices health changing', () => {

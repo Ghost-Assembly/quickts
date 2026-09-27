@@ -48,6 +48,7 @@ import {
 import { ExitNodeSection } from './exit-node-section.js';
 import { DeviceSection } from './device-section.js';
 import { InboxSection, SendSection } from './taildrop-section.js';
+import { fill } from './text.js';
 
 /** The tile's own icon, next to the clock. */
 const QuickTSIndicator = GObject.registerClass(
@@ -124,6 +125,11 @@ const QuickTSToggle = GObject.registerClass(
                 (_menu, open) => this._onOpenStateChanged(open),
                 this,
             );
+
+            // A plain connect, as ButtonBox does: connectObject with this as
+            // its own owner could be released by the destroy it is meant to
+            // handle.
+            this.connect('destroy', () => this._onDestroy());
         }
 
         /** Build the sections once; their contents are refilled on each change. */
@@ -227,7 +233,10 @@ const QuickTSToggle = GObject.registerClass(
 
                 // The switch reports what the user asked for; the daemon's
                 // answer comes back through the model and is what finally
-                // sets the state. A refused change therefore reverts.
+                // sets the state. A refused change therefore reverts: the
+                // model counts every failed change, so even one that moves
+                // nothing else is a change, and _syncOptions sets the switch
+                // back from the preferences that still hold.
                 item.connectObject(
                     'toggled',
                     (_item, value) => void apply(value),
@@ -260,9 +269,18 @@ const QuickTSToggle = GObject.registerClass(
             this.subtitle = subtitleFor(state, this._i18n);
             this.menu.setHeader(this._gicon, _('Tailscale'), this.subtitle);
 
+            // A login asked for is over once none is needed, however it went
+            // through. Left set, the next AuthURL for any reason at all — a
+            // reauth hours later — opens a browser nobody asked for.
+            if (!needsLogin(state)) this._loginRequested = false;
             this._maybeOpenAuthUrl(state);
 
-            if (moved('reachable') || moved('errorReason') || moved('backendState'))
+            if (
+                moved('reachable') ||
+                moved('errorReason') ||
+                moved('refusedReason') ||
+                moved('backendState')
+            )
                 this._syncProblems(state);
 
             if (moved('health')) this._syncWarnings(state);
@@ -326,6 +344,10 @@ const QuickTSToggle = GObject.registerClass(
                 else item.setSensitive(false);
 
                 this._problems.addMenuItem(item);
+            } else if (state.refusedReason) {
+                // A change the daemon answered and refused. The switch has
+                // already been set back by _syncOptions; this says why.
+                addDisabledRow(this._problems, problemMessage(state.refusedReason, _));
             }
 
             if (needsLogin(state)) {
@@ -355,9 +377,9 @@ const QuickTSToggle = GObject.registerClass(
             this._warnings.visible = total > 0;
             if (total === 0) return;
 
-            this._warnings.label.text = _n('%d warning', '%d warnings', total).replace(
-                '%d',
-                String(total),
+            this._warnings.label.text = fill(
+                _n('%d warning', '%d warnings', total),
+                total,
             );
 
             for (const line of lines) this._warnings.menu.addMenuItem(warningRow(line));
@@ -368,7 +390,7 @@ const QuickTSToggle = GObject.registerClass(
             if (hidden > 0)
                 addDisabledRow(
                     this._warnings.menu,
-                    _n('%d more', '%d more', hidden).replace('%d', String(hidden)),
+                    fill(_n('%d more', '%d more', hidden), hidden),
                 );
         }
 
@@ -549,7 +571,9 @@ const QuickTSToggle = GObject.registerClass(
             this._laterId = 0;
         }
 
-        destroy() {
+        // From the destroy signal rather than a destroy() override, which an
+        // actor destroyed from C never calls.
+        _onDestroy() {
             // Invalidates any async handler still waiting — a ping, a Taildrop
             // listing — so it cannot write into the rows about to be torn down.
             this._deviceSection.destroy();
@@ -577,7 +601,6 @@ const QuickTSToggle = GObject.registerClass(
             // open-state-changed closure that still reaches this toggle, the
             // model and the transport.
             this.menu.destroy();
-            super.destroy();
         }
     },
 );
@@ -734,11 +757,9 @@ function subtitleFor(state, { _, _n }) {
             return _('Off');
         case SUMMARY.EXIT_NODE:
             // An automatic exit node has an id but no name to show.
-            return value
-                ? _('via %s').replace('%s', String(value))
-                : _('via an exit node');
+            return value ? fill(_('via %s'), value) : _('via an exit node');
         case SUMMARY.WARNINGS:
-            return _n('%d warning', '%d warnings', value).replace('%d', String(value));
+            return fill(_n('%d warning', '%d warnings', value), value);
         default:
             return String(value ?? '');
     }

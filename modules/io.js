@@ -5,9 +5,14 @@
 // tailscaled, with no compositor in the loop — the only check that catches
 // Tailscale changing its JSON.
 //
-// It makes no decisions. Every path, body, delay and retry is computed by a
-// pure module and handed here to be carried out. If a branch worth testing ever
-// appears below, it belongs in modules/localapi.js, modules/timing.js or
+// It makes no decisions of its own. Every path and body, whether an answer is
+// JSON, what a Gio error or an HTTP status means, every delay and every retry
+// is computed by a pure module and handed here to be carried out. What is left
+// is the Soup and Gio calls, reading back what they report, and naming the few
+// failures only this file can see: no socket, a file name the sender should
+// not have chosen, a body that is not the JSON it claimed to be, no free file
+// name. If a branch worth testing ever appears below, it belongs in
+// modules/localapi.js, modules/errors.js, modules/timing.js or
 // modules/reconnect.js instead — which is also why this file is excluded from
 // coverage, with the reasoning recorded in vitest.config.js.
 
@@ -16,9 +21,15 @@ import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
 import { CanceledError } from './cancel.js';
-import { REASON, TransportError } from './errors.js';
+import { REASON, TransportError, reasonForIoError, reasonForStatus } from './errors.js';
 import { candidateNames, isSafeFileName } from './inbox.js';
-import { HOST, SOCKET_PATHS, pickSocket } from './localapi.js';
+import {
+    HOST,
+    JSON_TYPE,
+    SOCKET_PATHS,
+    isJsonContentType,
+    pickSocket,
+} from './localapi.js';
 
 // Promisified once, at module scope, because gnome-shell caches ESM modules for
 // the life of the session — so this runs exactly once however many times the
@@ -35,8 +46,6 @@ Gio._promisify(Gio.OutputStream.prototype, 'splice_async', 'splice_finish');
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
-const JSON_TYPE = 'application/json';
-
 const PORTAL_BUS = 'org.freedesktop.portal.Desktop';
 const PORTAL_PATH = '/org/freedesktop/portal/desktop';
 const FILE_CHOOSER = 'org.freedesktop.portal.FileChooser';
@@ -49,25 +58,26 @@ const REQUEST = 'org.freedesktop.portal.Request';
  * is also where a canceled operation stops looking like a failure. Getting
  * that wrong would make every disable() log an error.
  *
+ * Which reason a Gio code stands for is modules/errors.js's reasonForIoError;
+ * this only reads the code off the GError.
+ *
  * @param {unknown} error Caught value.
+ * @param {{local?: boolean, remote?: boolean}} [where] What the failed
+ *   operation touched, as reasonForIoError takes it. The daemon by default.
  * @returns {Error} A CanceledError or a TransportError.
  */
-function translate(error) {
+function translate(error, where = {}) {
     if (error?.name === 'CanceledError' || error?.name === 'TransportError')
         return error;
 
-    if (error instanceof Gio.IOErrorEnum || typeof error?.matches === 'function') {
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-            return new CanceledError();
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
-            return transportError(REASON.SOCKET_MISSING, error);
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_REFUSED))
-            return transportError(REASON.CONNECTION_REFUSED, error);
-        if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED))
-            return transportError(REASON.PERMISSION_DENIED, error);
-    }
+    // GJS gives every Error a matches(), which is false for anything but a
+    // GError of that domain — so a plain exception gets no code at all.
+    if (error?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+        return new CanceledError();
 
-    return transportError(REASON.UNKNOWN, error);
+    const code = error?.matches?.(Gio.IOErrorEnum, error.code) ? error.code : null;
+
+    return transportError(reasonForIoError(code, Gio.IOErrorEnum, where), error);
 }
 
 /**
@@ -108,21 +118,15 @@ function describeError(error) {
 /**
  * Turn a non-2xx answer into an error carrying a reason.
  *
- * 403 is the interesting one: it is what tailscaled returns to a user who is
- * not the tailscale operator, and it is the single most common reason this
- * extension appears to do nothing at all.
+ * Which reason is modules/errors.js's reasonForStatus.
  *
  * @param {Soup.Message} message Message that has been sent.
  * @returns {TransportError|null} An error, or null if the answer was usable.
  */
 function statusError(message) {
     const status = message.get_status();
-    if (status >= 200 && status < 300) return null;
-
-    const reason =
-        status === Soup.Status.FORBIDDEN || status === Soup.Status.UNAUTHORIZED
-            ? REASON.PERMISSION_DENIED
-            : REASON.HTTP;
+    const reason = reasonForStatus(status);
+    if (reason === null) return null;
 
     return new TransportError(reason, `HTTP ${status} ${message.get_reason_phrase()}`, {
         status,
@@ -132,6 +136,8 @@ function statusError(message) {
 /**
  * Decode a response body according to what the daemon said it is.
  *
+ * Whether that is JSON is modules/localapi.js's isJsonContentType.
+ *
  * @param {Soup.Message} message Message that has been sent.
  * @param {Uint8Array} bytes Raw body.
  * @returns {unknown} Parsed JSON, or the text.
@@ -139,13 +145,8 @@ function statusError(message) {
 function decode(message, bytes) {
     const text = decoder.decode(bytes);
 
-    // Prefix, not equality: a Content-Type may carry parameters, and
-    // "application/json; charset=utf-8" compared for equality would make every
-    // response decode as a raw string. The reducer would then read undefined
-    // off it everywhere and the menu would go blank while still reporting
-    // itself reachable, with nothing logged.
-    const contentType = message.response_headers.get_one('Content-Type') ?? '';
-    if (!contentType.split(';', 1)[0].trim().startsWith(JSON_TYPE)) return text;
+    if (!isJsonContentType(message.response_headers.get_one('Content-Type')))
+        return text;
 
     try {
         return JSON.parse(text);
@@ -272,6 +273,13 @@ export function createIo({ token }) {
             // Either timeout would tear it down on a quiet tailnet.
             timeout: 0,
             'idle-timeout': 0,
+            // libsoup allows two connections per host by default, and the
+            // bus holds one for as long as the extension is enabled. One
+            // more long request — a Taildrop send, a slow ping — then took
+            // the other, and every read queued behind it. There is only one
+            // host, the socket, so both limits are the same number.
+            'max-conns-per-host': 8,
+            'max-conns': 8,
         });
         return session;
     };
@@ -614,22 +622,30 @@ export function createIo({ token }) {
                         );
                         break;
                     } catch (error) {
+                        // Only the file was involved, so any other failure
+                        // is the file's, never the daemon's.
                         if (!error?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS))
-                            throw error;
+                            throw translate(error, { local: true, remote: false });
                         file = null;
                     }
                 }
 
                 if (!output)
-                    throw new TransportError(REASON.UNKNOWN, 'no free file name');
+                    throw new TransportError(REASON.LOCAL_FILE, 'no free file name');
 
-                await output.splice_async(
-                    input,
-                    Gio.OutputStreamSpliceFlags.CLOSE_SOURCE |
-                        Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
-                    GLib.PRIORITY_DEFAULT,
-                    cancellable,
-                );
+                // From the daemon's stream into the file, so a failure may be
+                // either's; reasonForIoError tells them apart by the code.
+                try {
+                    await output.splice_async(
+                        input,
+                        Gio.OutputStreamSpliceFlags.CLOSE_SOURCE |
+                            Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
+                        GLib.PRIORITY_DEFAULT,
+                        cancellable,
+                    );
+                } catch (error) {
+                    throw translate(error, { local: true });
+                }
 
                 return file.get_path();
             } catch (error) {

@@ -122,6 +122,12 @@ export function normalizePeer(peer, { exitNodeId = '', magicDNSSuffix = '' } = {
         isMullvad: isMullvad(peer),
         location: peer?.Location ?? null,
 
+        // The daemon's own name for the node, for copying. Not rebuilt from
+        // the display name and this tailnet's suffix: a node shared in from
+        // another tailnet, or one of Mullvad's, lives under a suffix of its
+        // own. Empty when the daemon gives none.
+        dnsName: String(peer?.DNSName ?? '').replace(/\.$/, ''),
+
         // Carried through as the daemon's own number; modules/taildrop.js is
         // where it becomes a decision and a reason.
         taildropTarget:

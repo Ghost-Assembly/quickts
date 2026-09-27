@@ -3,7 +3,14 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { ALL_KEYS, KEYS, SETTINGS, SHORTCUT_KEYS } from '../modules/settings.js';
+import {
+    ALL_KEYS,
+    KEYS,
+    SETTINGS,
+    SHORTCUT_KEYS,
+    settingText,
+} from '../modules/settings.js';
+import { extractableMsgids } from './support/i18n.js';
 
 const SCHEMA = fileURLToPath(
     new URL(
@@ -40,10 +47,34 @@ describe('the settings list and the gschema', () => {
     });
 
     it('describes every key it names', () => {
-        for (const setting of SETTINGS) {
-            expect(setting.label).toMatch(/\S/);
-            expect(setting.detail).toMatch(/\S/);
+        for (const { key } of SETTINGS) {
+            const { label, detail } = settingText(key, message => message);
+
+            expect(label, key).toMatch(/\S/);
+            expect(detail, key).toMatch(/\S/);
         }
+    });
+
+    // Empty rather than a guess, so the check above is what catches a key
+    // added to SETTINGS without words of its own.
+    it('has no words for a key it does not know', () => {
+        expect(settingText('no-such-key', message => message)).toEqual({
+            label: '',
+            detail: '',
+        });
+    });
+
+    // prefs.js used to hand this list's own English to _(), which xgettext
+    // never sees: a variable is not a msgid. Every string it is given now has
+    // to be a literal a translator is shown.
+    it('words every key only in strings a translator is given', () => {
+        const asked = [];
+        for (const { key } of SETTINGS)
+            settingText(key, message => (asked.push(message), message));
+
+        expect(asked).toHaveLength(SETTINGS.length * 2);
+        const known = extractableMsgids();
+        for (const message of asked) expect(known, message).toContain(message);
     });
 });
 

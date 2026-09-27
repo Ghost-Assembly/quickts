@@ -23,20 +23,24 @@ export default defineConfig({
             //   prefs.js       Adw and Gtk widget building. The rules it used
             //                  to hold live in modules/shortcuts.js.
             //   modules/io.js  Soup and Gio plumbing. Every URL, body, delay
-            //                  and retry decision lives in modules/localapi.js,
+            //                  and retry decision, whether an answer is JSON
+            //                  and what a Gio error or an HTTP status means,
+            //                  lives in modules/localapi.js, modules/errors.js,
             //                  modules/timing.js and modules/reconnect.js and
             //                  is tested there. io.js is covered instead by
             //                  scripts/localapi-check.sh, which runs it under
             //                  plain gjs against the real tailscaled — the only
             //                  check that catches Tailscale changing its JSON.
             //
-            // Kept identical to sonar.coverage.exclusions so the two agree.
+            // Those two files are exactly sonar.coverage.exclusions, so the
+            // two tools agree on what counts.
             //
-            // tests/** is listed because the `include` above did not keep a
-            // dynamically imported stub out of the report: extension.test.js
-            // pulls tests/stubs/shell-extension.js in through vi.doMock, and
-            // it turned up as production code. A stub counted either way is a
-            // number that means nothing.
+            // tests/** is listed here and not there. Sonar never counts it,
+            // because sonar.sources leaves it out, but the `include` above did
+            // not keep a dynamically imported stub out of this report:
+            // extension.test.js pulls tests/stubs/shell-extension.js in
+            // through vi.doMock, and it turned up as production code. A stub
+            // counted either way is a number that means nothing.
             exclude: ['prefs.js', 'modules/io.js', 'tests/**'],
         },
     },

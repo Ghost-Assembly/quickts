@@ -83,6 +83,25 @@ describe('received files', () => {
         expect(Main.osdMessages).toHaveLength(1);
     });
 
+    // The sender chose the name. As a replacement string, its $' would pull in
+    // the rest of the sentence around it.
+    it('reports a saved file by the name it was sent with', async () => {
+        const { panel, model, daemon } = setup();
+        daemon.responses.files = [{ Name: "draft$'s.txt", Size: 12 }];
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(row.text).toBe("Saved to /home/someone/Downloads/draft$'s.txt");
+        expect(Main.osdMessages.at(-1).label).toBe("Saved draft$'s.txt");
+    });
+
     // In that order: deleting first loses the file if the write fails.
     it('forgets the file only after saving it', async () => {
         const { panel, model, daemon } = setup();
@@ -123,8 +142,33 @@ describe('received files', () => {
         expect(row.text).toMatch(/\S/);
     });
 
+    // Not "Could not reach the Tailscale daemon": the daemon handed the file
+    // over, and it was the write here that failed.
+    it('says the file could not be saved when the write here fails', async () => {
+        const { panel, model, daemon } = setup();
+        withFiles(daemon);
+        panel.enable();
+        await model.start();
+        await settle();
+        toggleOf().menu.open();
+        await settle();
+
+        daemon.failures.set('/localapi/v0/files/report.pdf', {
+            name: 'TransportError',
+            reason: REASON.LOCAL_FILE,
+        });
+
+        const row = toggleOf()._inbox.menu.items.at(0);
+        row.activate();
+        await settle();
+
+        expect(row.text).toBe('Could not save the file.');
+        expect(row.sensitive).toBe(true);
+        expect(daemon.deleted).toEqual([]);
+    });
+
     // modules/model.js's saveFile used to hand this row modules/errors.js's
-    // already-composed English (messageFor), and _(error) then asked gettext
+    // already-composed English, and _(error) then asked gettext
     // to translate a sentence it can never see when the .pot file is built —
     // only a literal string reaches xgettext.
     // REASON.PERMISSION_DENIED, not REASON.HTTP: its composed message
