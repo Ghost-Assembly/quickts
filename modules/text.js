@@ -1,7 +1,7 @@
 // Filling a translated sentence with the values it names.
 //
-// This file imports nothing, so modules/errors.js can use it and stay
-// import-free, and prefs.js can reach it without the Shell's modules.
+// This file imports nothing, so modules/errors.js can use it and still import
+// nothing else, and prefs.js can reach it without the Shell's modules.
 
 /**
  * Fill a translated template's "%s" and "%d" placeholders, in order.

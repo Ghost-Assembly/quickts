@@ -99,11 +99,11 @@ Run `just ci` before claiming anything done.
 
 Write the failing test first (RED → GREEN). Layers:
 
-- **Vitest** (`just test`) — every module under `modules/` and
-  `extension.js`, run exactly as shipped; `prefs.js` is excluded and
-  imported by no test. `prefs.js` (Adw/Gtk widget construction) and
-  `modules/io.js` (Soup/Gio plumbing, checked instead against the real
-  daemon) are excluded from coverage — identically in `vitest.config.js`
+- **Vitest** (`just test`) — every module under `modules/` except
+  `io.js`, and `extension.js`, run exactly as shipped; `prefs.js` is
+  excluded and imported by no test. `prefs.js` (Adw/Gtk widget
+  construction) and `modules/io.js` (Soup/Gio plumbing, checked instead
+  against the real daemon) are excluded from coverage — identically in `vitest.config.js`
   and `sonar-project.properties`. Stubs for `gi://` and
   `resource:///` imports live in `tests/stubs/`; a fake daemon and a small
   fake Shell world are in `tests/support/`.
