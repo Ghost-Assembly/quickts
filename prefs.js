@@ -47,31 +47,6 @@ const GTK_BINDING = {
     acceleratorValid: (keyval, mask) => Gtk.accelerator_valid(keyval, mask),
 };
 
-/**
- * Stop GNOME acting on its own shortcuts while one is being captured, so a
- * combination like Super or Print SysRq reaches the capture dialog and can be
- * refused there, instead of opening the overview or taking a screenshot out
- * from under it. gnome-control-center does the same; the Shell may ask the
- * user first the first time an extension asks for this.
- *
- * Same approach as quickclip's prefs.js.
- *
- * @param {Gtk.Widget} widget Any widget belonging to the surface to inhibit —
- *   the capture dialog itself, once presented.
- * @returns {Function} Call once, on every way out, to give the shortcuts back.
- */
-function inhibitSystemShortcuts(widget) {
-    const surface = widget.get_native()?.get_surface();
-    // Only a Gdk.Toplevel surface has these; never let prefs throw without.
-    if (
-        typeof surface?.inhibit_system_shortcuts !== 'function' ||
-        typeof surface.restore_system_shortcuts !== 'function'
-    )
-        return () => {};
-    surface.inhibit_system_shortcuts(null);
-    return () => surface.restore_system_shortcuts();
-}
-
 const ShortcutRow = GObject.registerClass(
     class QuickTSShortcutRow extends Adw.ActionRow {
         /**
@@ -158,13 +133,31 @@ const ShortcutRow = GObject.registerClass(
             });
             dialog.add_controller(controller);
 
-            dialog.present();
+            // Stop GNOME acting on its own shortcuts while one is being
+            // captured, so a combination like Super or Print SysRq reaches
+            // this dialog and can be refused or bound here, instead of opening
+            // the overview or taking a screenshot out from under it. Mutter
+            // runs global keybindings before a focused client sees the key
+            // unless that client's surface inhibits them. gnome-control-center
+            // does the same; the Shell may ask the user first the first time
+            // an extension asks for this.
+            //
+            // Inhibited on map rather than right after present(), because the
+            // surface exists only once the window is realized, and restored on
+            // unmap, so that every way out — Escape, Backspace, an assigned
+            // key, the window's own close button — gives the shortcuts back.
+            // The same timing as QuickTiler's prefs.js.
+            dialog.connect('map', () => {
+                const surface = dialog.get_surface();
+                if (surface instanceof Gdk.Toplevel)
+                    surface.inhibit_system_shortcuts(null);
+            });
+            dialog.connect('unmap', () => {
+                const surface = dialog.get_surface();
+                if (surface instanceof Gdk.Toplevel) surface.restore_system_shortcuts();
+            });
 
-            // 'close-request' fires on every way out: Escape, Backspace and
-            // an assigned key all call dialog.close() above, and so does the
-            // window's own close button.
-            const restore = inhibitSystemShortcuts(dialog);
-            dialog.connect('close-request', () => restore());
+            dialog.present();
         }
     },
 );
