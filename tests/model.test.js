@@ -726,9 +726,9 @@ describe('recovering from an outage', () => {
             if (!dropped) {
                 dropped = true;
                 return (async function* () {
-                    throw new TransportError(REASON.CONNECTION_REFUSED, 'refused');
-                    // eslint-disable-next-line no-unreachable
-                    yield '';
+                    yield await Promise.reject(
+                        new TransportError(REASON.CONNECTION_REFUSED, 'refused'),
+                    );
                 })();
             }
             return realStream.call(daemon.client, descriptor);
@@ -801,9 +801,9 @@ describe('failures that reach the state', () => {
             if (first) {
                 first = false;
                 return (async function* () {
-                    throw new TransportError(REASON.CONNECTION_REFUSED, 'refused');
-                    // eslint-disable-next-line no-unreachable
-                    yield '';
+                    yield await Promise.reject(
+                        new TransportError(REASON.CONNECTION_REFUSED, 'refused'),
+                    );
                 })();
             }
             return realStream.call(daemon.client, descriptor);

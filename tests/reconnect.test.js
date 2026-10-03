@@ -62,9 +62,7 @@ const yields = (...values) =>
 
 const throws = error =>
     async function* () {
-        throw error;
-        // eslint-disable-next-line no-unreachable
-        yield '';
+        yield await Promise.reject(error);
     };
 
 describe('runWithReconnect', () => {
@@ -232,9 +230,7 @@ describe('runWithReconnect', () => {
             token,
             connect: async function* () {
                 token.cancel();
-                throw new CanceledError();
-                // eslint-disable-next-line no-unreachable
-                yield '';
+                yield await Promise.reject(new CanceledError());
             },
             onEvent: () => {},
             onError: error => errors.push(error),
@@ -255,9 +251,9 @@ describe('runWithReconnect', () => {
             token,
             connect: async function* () {
                 token.cancel();
-                throw new Error('g-io-error-quark: Operation was cancelled (19)');
-                // eslint-disable-next-line no-unreachable
-                yield '';
+                yield await Promise.reject(
+                    new Error('g-io-error-quark: Operation was cancelled (19)'),
+                );
             },
             onEvent: () => {},
             onError,

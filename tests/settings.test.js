@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -19,10 +18,8 @@ const SCHEMA = fileURLToPath(
     ),
 );
 
-// SCHEMA is a module-relative constant resolved from import.meta.url, not
-// input of any kind; the rule cannot see that it is not a variable path.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
-const xml = readFileSync(SCHEMA, 'utf8');
+import xml from '../schemas/org.gnome.shell.extensions.quickts.gschema.xml?raw';
+import metadata from '../metadata.json' with { type: 'json' };
 
 /** Key name -> declared type, straight out of the gschema. */
 const declared = new Map(
@@ -80,14 +77,6 @@ describe('the settings list and the gschema', () => {
 
 describe('the schema itself', () => {
     it('is the id metadata.json points at', () => {
-        const metadata = JSON.parse(
-            // eslint-disable-next-line security/detect-non-literal-fs-filename
-            readFileSync(
-                fileURLToPath(new URL('../metadata.json', import.meta.url)),
-                'utf8',
-            ),
-        );
-
         expect(xml).toContain(`id="${metadata['settings-schema']}"`);
         expect(SCHEMA).toContain(metadata['settings-schema']);
     });

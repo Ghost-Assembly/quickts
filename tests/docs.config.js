@@ -10,6 +10,7 @@ export default {
     sections: [
         ['overview', 'Overview'],
         ['install', 'Install'],
+        ['uninstall', 'Uninstall'],
         ['menu', 'The menu'],
         ['preferences', 'Preferences'],
         ['keyboard', 'Keyboard'],
