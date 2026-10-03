@@ -10,50 +10,18 @@ export default defineConfig({
         include: ['tests/**/*.test.js'],
         coverage: {
             provider: 'v8',
-            reporter: ['text', 'lcov'],
-            // Everything the extension ships, so the denominator is the real
-            // one. Listing only the modules that happen to be covered would
-            // measure coverage against a figure chosen to flatter it.
-            include: ['modules/**/*.js', 'extension.js', 'prefs.js'],
-            // Two exceptions, both for the same reason: what is left in them
-            // after the decisions were moved out is toolkit construction, which
-            // a unit test can only assert against a stub of the toolkit — that
-            // tests the stub, not the code.
-            //
-            //   prefs.js       Adw and Gtk widget building. The rules it used
-            //                  to hold live in modules/shortcuts.js.
-            //   modules/io.js  Soup and Gio plumbing. Every URL, body, delay
-            //                  and retry decision, whether an answer is JSON
-            //                  and what a Gio error or an HTTP status means,
-            //                  lives in modules/localapi.js, modules/errors.js,
-            //                  modules/timing.js and modules/reconnect.js and
-            //                  is tested there. io.js is covered instead by
-            //                  scripts/localapi-check.sh, which runs it under
-            //                  plain gjs against the real tailscaled — the only
-            //                  check that catches Tailscale changing its JSON.
-            //
-            // Those two files are exactly sonar.coverage.exclusions, so the
-            // two tools agree on what counts.
-            //
-            // tests/** is listed here and not there. Sonar never counts it,
-            // because sonar.sources leaves it out, but the `include` above did
-            // not keep a dynamically imported stub out of this report:
-            // extension.test.js pulls tests/stubs/shell-extension.js in
-            // through vi.doMock, and it turned up as production code. A stub
-            // counted either way is a number that means nothing.
-            exclude: ['prefs.js', 'modules/io.js', 'tests/**'],
+            reporter: ['text', 'lcov', 'html'],
+            include: [
+                'modules/**/*.js',
+                'extension.js',
+                'prefs.js',
+                'scripts/soloist-runner.js',
+            ],
+            exclude: ['tests/**'],
         },
     },
 
-    // gnome-shell resolves these at runtime; Node cannot. Pointing them at
-    // stubs is what makes the actor layer reachable from Vitest at all. The
-    // stubs live in tests/, so they never ship and are never counted as
-    // covered code.
-    //
-    // gi://Soup is deliberately absent. Nothing under test imports it, because
-    // only modules/io.js does and that file is excluded above. The day this
-    // list needs a Soup entry is the day a decision has leaked into the
-    // transport, and the missing alias is how we find out.
+    // GNOME imports resolve to recording stubs for offline behavior tests.
     resolve: {
         alias: [
             { find: 'gi://Clutter', replacement: stub('gi-clutter') },

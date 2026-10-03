@@ -1,0 +1,5 @@
+{
+  "$schema": "project.schema.json",
+  "repository": "quickts",
+  "requirements": "Requires Tailscale 1.82 or later and your user configured as the Tailscale operator. The live LocalAPI check requires a responding tailscaled daemon."
+}

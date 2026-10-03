@@ -5,9 +5,6 @@
 // would enable, look right under `gettext: message => message`, and ship with
 // a msgid no translator was ever given.
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
 const STRING = `'((?:[^'\\\\]|\\\\.)*)'`;
 const SINGLE = new RegExp(`(?<![\\w.$])_\\(\\s*${STRING}\\s*[,)]`, 'g');
 const PLURAL = new RegExp(`(?<![\\w.$])_n\\(\\s*${STRING}\\s*,\\s*${STRING}\\s*,`, 'g');
@@ -19,34 +16,19 @@ const PLURAL = new RegExp(`(?<![\\w.$])_n\\(\\s*${STRING}\\s*,\\s*${STRING}\\s*,
 const CALL_START = /(?<![\w.$])_n?\(/g;
 
 /**
- * The two entry points, which gettext is imported into rather than handed. No
- * test runs prefs.js at all, so reading its source is the only check its
- * strings get.
- */
-const ENTRY_POINTS = ['prefs.js', 'extension.js'];
-
-/**
  * @returns {{name: string, source: string}[]} The name and contents of every
- *   file under modules/, then of each entry point.
+ *   module and both entry points, including preferences strings that unit
+ *   tests cannot exercise through GTK.
  */
 function moduleFiles() {
-    const root = fileURLToPath(new URL('../../', import.meta.url));
-    const dir = `${root}modules/`;
-    // A module-relative constant directory and the files in it, not input.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const names = readdirSync(dir).filter(name => name.endsWith('.js'));
-    return [
-        ...names.map(name => ({
-            name,
-            // eslint-disable-next-line security/detect-non-literal-fs-filename
-            source: readFileSync(dir + name, 'utf8'),
-        })),
-        ...ENTRY_POINTS.map(name => ({
-            name,
-            // eslint-disable-next-line security/detect-non-literal-fs-filename
-            source: readFileSync(root + name, 'utf8'),
-        })),
-    ];
+    const sources = import.meta.glob(
+        ['../../modules/*.js', '../../prefs.js', '../../extension.js'],
+        { eager: true, query: '?raw', import: 'default' },
+    );
+    return Object.entries(sources).map(([path, source]) => ({
+        name: path.replace('../../', ''),
+        source,
+    }));
 }
 
 /**
