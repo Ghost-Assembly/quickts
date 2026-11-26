@@ -16,6 +16,7 @@
     "modules/io.js",
     "modules/layout.js",
     "modules/localapi.js",
+    "modules/menu-animation.js",
     "modules/menu-items.js",
     "modules/model.js",
     "modules/mullvad.js",
