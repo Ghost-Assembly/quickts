@@ -7,7 +7,7 @@
 [![Docs](https://img.shields.io/website?url=https%3A%2F%2Fghost-assembly.com%2Fquickts%2F&label=docs)](https://ghost-assembly.com/quickts/)
 [![Release](https://img.shields.io/github/v/release/Ghost-Assembly/quickts)](https://github.com/Ghost-Assembly/quickts/releases/latest)
 [![License](https://img.shields.io/github/license/Ghost-Assembly/quickts)](https://github.com/Ghost-Assembly/quickts/blob/main/LICENSE)
-[![GNOME](https://img.shields.io/badge/GNOME-50-blue)](https://ghost-assembly.com/quickts/#install)
+[![GNOME](https://img.shields.io/badge/GNOME-50%20%7C%2051-blue)](https://ghost-assembly.com/quickts/#install)
 [![Security issues](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsonarcloud.io%2Fapi%2Fmeasures%2Fcomponent%3Fcomponent%3DGhost-Assembly_quickts%26metricKeys%3Dsoftware_quality_security_issues&query=%24.component.measures%5B0%5D.value&label=Security+issues)](https://sonarcloud.io/dashboard?id=Ghost-Assembly_quickts)
 [![Reliability issues](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsonarcloud.io%2Fapi%2Fmeasures%2Fcomponent%3Fcomponent%3DGhost-Assembly_quickts%26metricKeys%3Dsoftware_quality_reliability_issues&query=%24.component.measures%5B0%5D.value&label=Reliability+issues)](https://sonarcloud.io/dashboard?id=Ghost-Assembly_quickts)
 [![Maintainability issues](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsonarcloud.io%2Fapi%2Fmeasures%2Fcomponent%3Fcomponent%3DGhost-Assembly_quickts%26metricKeys%3Dsoftware_quality_maintainability_issues&query=%24.component.measures%5B0%5D.value&label=Maintainability+issues)](https://sonarcloud.io/dashboard?id=Ghost-Assembly_quickts)
@@ -27,7 +27,7 @@ testing, packaging and releasing.
 
 ## Requires
 
-- GNOME Shell 50
+- GNOME Shell 50 or 51
 - Tailscale 1.82 or later — the first release whose `/status` says which
   peers can receive a file. Developed and checked against 1.102.
 - Your user set as the Tailscale operator:
@@ -44,7 +44,7 @@ flips back.
 
 <!-- quick-template:install:start -->
 
-Requires GNOME Shell 50. Requires Tailscale 1.82 or later and your user configured as the Tailscale operator. The live LocalAPI check requires a responding tailscaled daemon.
+Requires GNOME Shell 50 or 51. Requires Tailscale 1.82 or later and your user configured as the Tailscale operator. The live LocalAPI check requires a responding tailscaled daemon.
 
 ### From a release
 

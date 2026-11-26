@@ -37,6 +37,10 @@ export default defineConfig({
                 replacement: stub('shell-boxpointer'),
             },
             {
+                find: 'resource:///org/gnome/shell/misc/config.js',
+                replacement: stub('shell-config'),
+            },
+            {
                 find: 'resource:///org/gnome/shell/ui/main.js',
                 replacement: stub('shell-main'),
             },
