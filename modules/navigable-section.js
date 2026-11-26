@@ -2,10 +2,10 @@
 //
 // Split out of modules/panel.js: the exit node and device sections both use it.
 
-import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { ActionMenuItem } from './menu-items.js';
+import { NO_ANIMATE } from './menu-animation.js';
 
 /**
  * A submenu that shows either a list or the detail of one entry in it.
@@ -58,7 +58,7 @@ export class NavigableSection {
 
         // render() destroyed the row that was activated, and with it the
         // submenu's idea of what to keep open.
-        this._item.menu.open(BoxPointer.PopupAnimation.NONE);
+        this._item.menu.open(NO_ANIMATE);
     }
 
     /**

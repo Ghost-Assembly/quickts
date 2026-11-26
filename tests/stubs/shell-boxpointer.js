@@ -1,4 +1,4 @@
-// resource:///org/gnome/shell/ui/boxpointer.js, as far as modules/panel.js uses it.
+// resource:///org/gnome/shell/ui/boxpointer.js, as far as modules/menu-animation.js uses it.
 
 export const PopupAnimation = Object.freeze({
     NONE: 0,

@@ -19,7 +19,6 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
-import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
@@ -34,6 +33,7 @@ import {
     summaryOf,
 } from './health.js';
 import { maxHeightStyle, menuMaxHeight } from './layout.js';
+import { ANIMATE } from './menu-animation.js';
 import { KEYS, SHORTCUT_KEYS } from './settings.js';
 import { advertisesExitNode } from './routes.js';
 import {
@@ -709,7 +709,7 @@ export class Panel {
 
         if (!quickSettings.menu.isOpen) Main.panel.toggleQuickSettings();
 
-        this._toggle.menu.open(BoxPointer.PopupAnimation.FULL);
+        this._toggle.menu.open(ANIMATE);
     }
 
     /** Release everything. */
